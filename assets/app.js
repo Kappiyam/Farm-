@@ -4,6 +4,7 @@
   const $ = (selector) => document.querySelector(selector);
   const content = $("#app-content");
   const appName = config.appName || "Farm Management";
+  let probeSequence = 0;
   $("#brand-name").textContent = appName;
   document.title = appName;
 
@@ -20,9 +21,9 @@
       <div class="grid">
         <article class="panel">
           <div class="panel-head"><h3>Backend connection</h3><span class="tag">Foundation</span></div>
-          <p>Check whether the Google Apps Script web app is deployed and reachable.</p>
-          <div id="api-status" class="connection"><i class="connection-dot"></i><span>Connection not checked</span></div>
-          <div style="margin-top:14px"><button id="check-api" class="button">Check connection</button></div>
+          <p>Run a lightweight API probe and a separate Google Sheets connection probe.</p>
+          <div id="api-status" class="connection"><i class="connection-dot"></i><span>Diagnostics not run</span></div>
+          <div style="margin-top:14px"><button id="check-api" class="button">Run diagnostics</button></div>
         </article>
         <article class="panel">
           <div class="panel-head"><h3>Implementation sequence</h3><span class="tag">Planned</span></div>
@@ -33,7 +34,7 @@
           </div>
         </article>
       </div>
-      <div class="notice">Authentication and farm data are intentionally not enabled yet. We will add them after the backend configuration and data structure are established.</div>`;
+      <div class="notice">Diagnostics return timing metadata only. No farm records are read or exposed.</div>`;
   }
 
   function renderFarmSetup() {
@@ -58,10 +59,44 @@
       button.classList.toggle("active", button.dataset.view === name);
     });
     content.innerHTML = view.render();
-    if (name === "overview") $("#check-api").addEventListener("click", checkApi);
+    if (name === "overview") $("#check-api").addEventListener("click", runDiagnostics);
   }
 
-  function checkApi() {
+  function loadJsonpProbe(probe) {
+    return new Promise((resolve, reject) => {
+      const callbackName = "FarmAppProbeCallback" + (++probeSequence);
+      const script = document.createElement("script");
+      const startedAt = performance.now();
+      let settled = false;
+      const timeoutId = window.setTimeout(() => finish(new Error("Timed out: " + probe)), 12000);
+
+      function cleanup() {
+        window.clearTimeout(timeoutId);
+        script.remove();
+        try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
+      }
+
+      function finish(error, result) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) return reject(error);
+        resolve({
+          result: result,
+          browserRoundTripMs: Math.round(performance.now() - startedAt)
+        });
+      }
+
+      window[callbackName] = (result) => finish(null, result);
+      script.onerror = () => finish(new Error("Unable to load " + probe + " probe"));
+      const separator = config.apiUrl.includes("?") ? "&" : "?";
+      script.src = config.apiUrl + separator + "probe=" + encodeURIComponent(probe) +
+        "&callback=" + encodeURIComponent(callbackName) + "&_=" + Date.now();
+      document.head.appendChild(script);
+    });
+  }
+
+  async function runDiagnostics() {
     const status = $("#api-status");
     const button = $("#check-api");
     if (!config.apiUrl) {
@@ -70,47 +105,30 @@
     }
 
     button.disabled = true;
-    button.textContent = "Checking…";
-    setStatus(status, "", "Contacting backend…");
+    button.textContent = "Testing…";
+    setStatus(status, "", "Running lightweight and spreadsheet probes…");
 
-    const callbackName = "FarmAppHealthCallback";
-    const script = document.createElement("script");
-    let settled = false;
-    const requestStartedAt = performance.now();
-    const timeoutId = window.setTimeout(() => finish(new Error("Request timed out")), 12000);
+    try {
+      const light = await loadJsonpProbe("light");
+      const sheet = await loadJsonpProbe("sheet");
 
-    function cleanup() {
-      window.clearTimeout(timeoutId);
-      script.remove();
-      try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
+      if (!light.result.ok || light.result.probe !== "light" ||
+          !sheet.result.ok || sheet.result.status !== "database_connected") {
+        throw new Error("A diagnostic probe did not pass");
+      }
+
+      const summary =
+        "Connected · API " + sheet.result.version +
+        " | Light: browser " + light.browserRoundTripMs + " ms, server " + light.result.serverTotalMs + " ms" +
+        " | Sheets: browser " + sheet.browserRoundTripMs + " ms, server " + sheet.result.serverTotalMs + " ms" +
+        " (open " + sheet.result.spreadsheetOpenMs + " ms; name " + sheet.result.spreadsheetNameMs + " ms)";
+      setStatus(status, "good", summary);
+    } catch (error) {
+      setStatus(status, "bad", "Diagnostics failed · " + error.message);
+    } finally {
       button.disabled = false;
-      button.textContent = "Check connection";
+      button.textContent = "Run diagnostics";
     }
-
-    function finish(error, result) {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (error) {
-        setStatus(status, "bad", "Connection failed · " + error.message);
-        return;
-      }
-      if (!result || !result.ok || result.service !== "farm-management-api" ||
-          result.status !== "database_connected") {
-        setStatus(status, "bad", "Backend responded, but database verification failed");
-        return;
-      }
-      const roundTripMs = Math.round(performance.now() - requestStartedAt);
-      setStatus(status, "good", "Connected · API " + (result.version || "unknown") +
-        " · " + (result.databaseName || "Database ready") + " · " + roundTripMs + " ms");
-    }
-
-    window[callbackName] = (result) => finish(null, result);
-    script.onerror = () => finish(new Error("Unable to load Apps Script health response"));
-    const separator = config.apiUrl.includes("?") ? "&" : "?";
-    script.src = config.apiUrl + separator + "callback=" + callbackName +
-      "&_=" + Date.now();
-    document.head.appendChild(script);
   }
 
   function setStatus(element, state, message) {
