@@ -21,9 +21,9 @@
       <div class="grid">
         <article class="panel">
           <div class="panel-head"><h3>Backend connection</h3><span class="tag">Foundation</span></div>
-          <p>Run a lightweight API probe and a separate Google Sheets connection probe.</p>
+          <p>Run 10 repeated lightweight API probes and 10 spreadsheet connection probes to calculate median and p95 timings.</p>
           <div id="api-status" class="connection"><i class="connection-dot"></i><span>Diagnostics not run</span></div>
-          <div style="margin-top:14px"><button id="check-api" class="button">Run diagnostics</button></div>
+          <div style="margin-top:14px"><button id="check-api" class="button">Run 20-request benchmark</button></div>
         </article>
         <article class="panel">
           <div class="panel-head"><h3>Implementation sequence</h3><span class="tag">Planned</span></div>
@@ -34,7 +34,7 @@
           </div>
         </article>
       </div>
-      <div class="notice">Diagnostics return timing metadata only. No farm records are read or exposed.</div>`;
+      <div class="notice">This diagnostic sends 20 sequential read-only health requests. It does not read farm records or write to the database.</div>`;
   }
 
   function renderFarmSetup() {
@@ -91,9 +91,23 @@
       script.onerror = () => finish(new Error("Unable to load " + probe + " probe"));
       const separator = config.apiUrl.includes("?") ? "&" : "?";
       script.src = config.apiUrl + separator + "probe=" + encodeURIComponent(probe) +
-        "&callback=" + encodeURIComponent(callbackName) + "&_=" + Date.now();
+        "&callback=" + encodeURIComponent(callbackName) + "&_=" + Date.now() + "-" + probeSequence;
       document.head.appendChild(script);
     });
+  }
+
+  function percentile(values, fraction) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    return sorted[Math.max(0, Math.ceil(fraction * sorted.length) - 1)];
+  }
+
+  function stats(values) {
+    return {
+      median: percentile(values, 0.5),
+      p95: percentile(values, 0.95),
+      min: Math.min.apply(null, values),
+      max: Math.max.apply(null, values)
+    };
   }
 
   async function runDiagnostics() {
@@ -106,28 +120,64 @@
 
     button.disabled = true;
     button.textContent = "Testing…";
-    setStatus(status, "", "Running lightweight and spreadsheet probes…");
+    setStatus(status, "", "Running 20 sequential read-only requests. Please keep this page open…");
+
+    const lightBrowser = [];
+    const lightServer = [];
+    const sheetBrowser = [];
+    const sheetServer = [];
+    const sheetOpen = [];
+    const sheetName = [];
 
     try {
-      const light = await loadJsonpProbe("light");
-      const sheet = await loadJsonpProbe("sheet");
+      for (let i = 0; i < 10; i++) {
+        button.textContent = "Testing " + (i * 2 + 1) + " of 20…";
+        const light = await loadJsonpProbe("light");
+        if (!light.result.ok || light.result.probe !== "light") {
+          throw new Error("Light probe " + (i + 1) + " failed");
+        }
+        lightBrowser.push(light.browserRoundTripMs);
+        lightServer.push(Number(light.result.serverTotalMs) || 0);
 
-      if (!light.result.ok || light.result.probe !== "light" ||
-          !sheet.result.ok || sheet.result.status !== "database_connected") {
-        throw new Error("A diagnostic probe did not pass");
+        button.textContent = "Testing " + (i * 2 + 2) + " of 20…";
+        const sheet = await loadJsonpProbe("sheet");
+        if (!sheet.result.ok || sheet.result.status !== "database_connected") {
+          throw new Error("Spreadsheet probe " + (i + 1) + " failed");
+        }
+        sheetBrowser.push(sheet.browserRoundTripMs);
+        sheetServer.push(Number(sheet.result.serverTotalMs) || 0);
+        sheetOpen.push(Number(sheet.result.spreadsheetOpenMs) || 0);
+        sheetName.push(Number(sheet.result.spreadsheetNameMs) || 0);
       }
 
+      const lb = stats(lightBrowser);
+      const ls = stats(lightServer);
+      const sb = stats(sheetBrowser);
+      const ss = stats(sheetServer);
+      const so = stats(sheetOpen);
+      const sn = stats(sheetName);
+
       const summary =
-        "Connected · API " + sheet.result.version +
-        " | Light: browser " + light.browserRoundTripMs + " ms, server " + light.result.serverTotalMs + " ms" +
-        " | Sheets: browser " + sheet.browserRoundTripMs + " ms, server " + sheet.result.serverTotalMs + " ms" +
-        " (open " + sheet.result.spreadsheetOpenMs + " ms; name " + sheet.result.spreadsheetNameMs + " ms)";
+        "20/20 requests passed · API " + (config.version || "development") + "\n" +
+        "LIGHT browser median/p95: " + lb.median + "/" + lb.p95 + " ms (min " + lb.min + ", max " + lb.max + ")\n" +
+        "LIGHT server median/p95: " + ls.median + "/" + ls.p95 + " ms\n" +
+        "SHEETS browser median/p95: " + sb.median + "/" + sb.p95 + " ms (min " + sb.min + ", max " + sb.max + ")\n" +
+        "SHEETS server median/p95: " + ss.median + "/" + ss.p95 + " ms\n" +
+        "SHEETS open median: " + so.median + " ms · name median: " + sn.median + " ms";
       setStatus(status, "good", summary);
+      console.log("FARM_API_LATENCY_BENCHMARK " + JSON.stringify({
+        requestsPerProbe: 10,
+        lightBrowser: lb, lightServer: ls,
+        sheetBrowser: sb, sheetServer: ss,
+        spreadsheetOpen: so, spreadsheetName: sn
+      }));
     } catch (error) {
-      setStatus(status, "bad", "Diagnostics failed · " + error.message);
+      setStatus(status, "bad", "Benchmark failed · " + error.message +
+        ". Completed light requests: " + lightBrowser.length +
+        "; completed spreadsheet requests: " + sheetBrowser.length);
     } finally {
       button.disabled = false;
-      button.textContent = "Run diagnostics";
+      button.textContent = "Run 20-request benchmark";
     }
   }
 
@@ -137,6 +187,7 @@
     icon.className = "connection-dot";
     const label = document.createElement("span");
     label.textContent = message;
+    label.style.whiteSpace = "pre-line";
     element.replaceChildren(icon, label);
   }
 
