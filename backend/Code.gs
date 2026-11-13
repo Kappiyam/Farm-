@@ -1,13 +1,13 @@
 /**
  * Farm Management API — database foundation
- * Version: 0.2.1
+ * Version: 0.2.2
  *
  * Bound to the Farm Management Database spreadsheet.
  * Run setupDatabase() manually once from the Apps Script editor.
  * This function creates missing tabs only; it never clears existing data.
  */
 
-const APP_VERSION = "0.2.1";
+const APP_VERSION = "0.2.2";
 const APP_SERVICE = "farm-management-api";
 const SCHEMA_VERSION = "0.1.0";
 
@@ -85,15 +85,51 @@ function setupDatabase() {
 }
 
 /**
- * JSON remains the default browser/direct response.
- * JSONP is supported only for the public, read-only health check because
- * Apps Script ContentService redirects can prevent cross-origin fetch().
- * Never expose authenticated records or write actions through JSONP.
+ * Public, read-only diagnostics only.
+ * probe=light avoids Spreadsheet service calls.
+ * probe=sheet measures opening the bound spreadsheet and reading its name.
+ * JSONP must never be used for authenticated records or write actions.
  */
 function doGet(event) {
-  const result = health_();
-  const callback = event && event.parameter ? String(event.parameter.callback || "") : "";
+  const started = Date.now();
+  const params = event && event.parameter ? event.parameter : {};
+  const probe = String(params.probe || "");
+  let result;
 
+  if (probe === "light") {
+    result = {
+      ok: true,
+      service: APP_SERVICE,
+      version: APP_VERSION,
+      probe: "light",
+      status: "api_ready"
+    };
+  } else if (probe === "sheet") {
+    const openStarted = Date.now();
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheetOpenMs = Date.now() - openStarted;
+    const nameStarted = Date.now();
+    const databaseName = ss ? ss.getName() : null;
+    const spreadsheetNameMs = Date.now() - nameStarted;
+
+    result = {
+      ok: !!ss,
+      service: APP_SERVICE,
+      version: APP_VERSION,
+      probe: "sheet",
+      status: ss ? "database_connected" : "database_unavailable",
+      databaseName: databaseName,
+      spreadsheetOpenMs: spreadsheetOpenMs,
+      spreadsheetNameMs: spreadsheetNameMs
+    };
+  } else {
+    result = health_();
+  }
+
+  result.serverTotalMs = Date.now() - started;
+  result.timestamp = new Date().toISOString();
+
+  const callback = String(params.callback || "");
   if (callback) {
     if (!/^[A-Za-z_$][0-9A-Za-z_$]{0,63}$/.test(callback)) {
       return jsonResponse_({ ok: false, code: "BAD_CALLBACK", error: "Invalid callback name" });
