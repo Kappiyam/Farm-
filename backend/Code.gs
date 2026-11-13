@@ -7,7 +7,7 @@
  * This function creates missing tabs only; it never clears existing data.
  */
 
-const APP_VERSION = "0.2.3";
+const APP_VERSION = "0.3.0";
 const APP_SERVICE = "farm-management-api";
 const SCHEMA_VERSION = "0.1.0";
 
@@ -97,6 +97,10 @@ function doGet(event) {
     return HtmlService.createHtmlOutputFromFile("NativeBenchmark")
       .setTitle("Farm Management — Native API Benchmark");
   }
+  if (String(params.mode || "") === "app") {
+    return HtmlService.createHtmlOutputFromFile("App")
+      .setTitle("Farm Management");
+  }
   const probe = String(params.probe || "");
   let result;
 
@@ -180,6 +184,23 @@ function nativeProbeSheet() {
     spreadsheetOpenMs: spreadsheetOpenMs,
     spreadsheetNameMs: spreadsheetNameMs,
     serverTotalMs: Date.now() - started
+  };
+}
+
+/**
+ * Native application overview handshake.
+ * Returns only deployment and database health metadata; no farm records.
+ */
+function nativeAppOverview() {
+  const started = Date.now();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return {
+    ok: !!ss,
+    service: APP_SERVICE,
+    version: APP_VERSION,
+    status: ss ? "database_connected" : "database_unavailable",
+    databaseName: ss ? ss.getName() : null,
+    serverElapsedMs: Date.now() - started
   };
 }
 
