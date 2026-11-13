@@ -1,0 +1,55 @@
+name: Verify Apps Script deployment access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Read-only Apps Script access check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: apps-script-production
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned clasp
+        run: npm install --global @google/clasp@3.4.1
+
+      - name: Configure clasp authentication
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: "1nOYC75sL8Q0NZW1umQwC9JUUFiovi8FDGpBKnJixVdyGjur7Y0fo1IoL"
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::GitHub secret CLASPRC_JSON is not configured."
+            exit 1
+          fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          node -e 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.clasprc.json", "utf8"));'
+          printf '{"scriptId":"%s","rootDir":"backend"}\n' "$SCRIPT_ID" > .clasp.json
+
+      - name: Verify Google Apps Script access and existing deployment
+        env:
+          EXPECTED_DEPLOYMENT_ID: ${{ vars.SCRIPT_DEPLOYMENT_ID }}
+        run: |
+          if [ -z "$EXPECTED_DEPLOYMENT_ID" ]; then
+            echo "::error::SCRIPT_DEPLOYMENT_ID is not configured."
+            exit 1
+          fi
+          DEPLOYMENTS="$(clasp deployments)"
+          printf '%s\n' "$DEPLOYMENTS"
+          printf '%s\n' "$DEPLOYMENTS" | grep -Fq "$EXPECTED_DEPLOYMENT_ID" || {
+            echo "::error::The configured deployment ID was not found in this Apps Script project."
+            exit 1
+          }
+          echo "Read-only verification passed. No source files or deployments were changed."
