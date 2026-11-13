@@ -1,0 +1,77 @@
+name: Deploy Apps Script
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_note:
+        description: "Short description for this Apps Script release"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy approved Apps Script release
+    runs-on: ubuntu-latest
+    environment: apps-script-production
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Check out approved source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned clasp
+        run: npm install --global @google/clasp@3.4.1
+
+      - name: Configure clasp authentication
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: "1nOYC75sL8Q0NZW1umQwC9JUUFiovi8FDGpBKnJixVdyGjur7Y0fo1IoL"
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::GitHub secret CLASPRC_JSON is not configured."
+            exit 1
+          fi
+          mkdir -p "$HOME"
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          printf '{"scriptId":"%s","rootDir":"backend"}\n' "$SCRIPT_ID" > .clasp.json
+
+      - name: Validate deployment inputs
+        env:
+          DEPLOYMENT_ID: ${{ vars.SCRIPT_DEPLOYMENT_ID }}
+          RELEASE_NOTE: ${{ inputs.release_note }}
+        run: |
+          if [ -z "$DEPLOYMENT_ID" ]; then
+            echo "::error::Environment variable SCRIPT_DEPLOYMENT_ID is not configured."
+            exit 1
+          fi
+          test -f backend/appsscript.json
+          test -f backend/Code.gs
+          test -f backend/App.html
+          echo "Source files and target deployment are configured."
+
+      - name: Upload Apps Script source
+        run: npx --yes @google/clasp@3.4.1 push --force
+
+      - name: Update existing web app deployment
+        env:
+          DEPLOYMENT_ID: ${{ vars.SCRIPT_DEPLOYMENT_ID }}
+          RELEASE_NOTE: ${{ inputs.release_note }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          DESCRIPTION="${RELEASE_NOTE} [${COMMIT_SHA:0:7}]"
+          npx --yes @google/clasp@3.4.1 deploy --deploymentId "$DEPLOYMENT_ID" --description "$DESCRIPTION"
