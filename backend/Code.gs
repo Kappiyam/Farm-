@@ -7,7 +7,7 @@
  * This function creates missing tabs only; it never clears existing data.
  */
 
-const APP_VERSION = "0.2.2";
+const APP_VERSION = "0.2.3";
 const APP_SERVICE = "farm-management-api";
 const SCHEMA_VERSION = "0.1.0";
 
@@ -93,6 +93,10 @@ function setupDatabase() {
 function doGet(event) {
   const started = Date.now();
   const params = event && event.parameter ? event.parameter : {};
+  if (String(params.mode || "") === "native-benchmark") {
+    return HtmlService.createHtmlOutputFromFile("NativeBenchmark")
+      .setTitle("Farm Management — Native API Benchmark");
+  }
   const probe = String(params.probe || "");
   let result;
 
@@ -140,6 +144,43 @@ function doGet(event) {
   }
 
   return jsonResponse_(result);
+}
+
+/**
+ * Native HTML Service benchmark methods.
+ * These return timing metadata only; they do not expose farm records.
+ */
+function nativeProbeLight() {
+  const started = Date.now();
+  return {
+    ok: true,
+    service: APP_SERVICE,
+    version: APP_VERSION,
+    probe: "light",
+    status: "api_ready",
+    serverTotalMs: Date.now() - started
+  };
+}
+
+function nativeProbeSheet() {
+  const started = Date.now();
+  const openStarted = Date.now();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const spreadsheetOpenMs = Date.now() - openStarted;
+  const nameStarted = Date.now();
+  const databaseName = ss ? ss.getName() : null;
+  const spreadsheetNameMs = Date.now() - nameStarted;
+  return {
+    ok: !!ss,
+    service: APP_SERVICE,
+    version: APP_VERSION,
+    probe: "sheet",
+    status: ss ? "database_connected" : "database_unavailable",
+    databaseName: databaseName,
+    spreadsheetOpenMs: spreadsheetOpenMs,
+    spreadsheetNameMs: spreadsheetNameMs,
+    serverTotalMs: Date.now() - started
+  };
 }
 
 function doPost(event) {
