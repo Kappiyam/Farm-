@@ -128,6 +128,7 @@
     const sheetServer = [];
     const sheetOpen = [];
     const sheetName = [];
+    let apiVersion = "unknown";
 
     try {
       for (let i = 0; i < 10; i++) {
@@ -144,6 +145,7 @@
         if (!sheet.result.ok || sheet.result.status !== "database_connected") {
           throw new Error("Spreadsheet probe " + (i + 1) + " failed");
         }
+        apiVersion = sheet.result.version || apiVersion;
         sheetBrowser.push(sheet.browserRoundTripMs);
         sheetServer.push(Number(sheet.result.serverTotalMs) || 0);
         sheetOpen.push(Number(sheet.result.spreadsheetOpenMs) || 0);
@@ -158,7 +160,7 @@
       const sn = stats(sheetName);
 
       const summary =
-        "20/20 requests passed · API " + (sheet.result.version || "unknown") + "\n" +
+        "20/20 requests passed · API " + apiVersion + "\n" +
         "LIGHT browser median/p95: " + lb.median + "/" + lb.p95 + " ms (min " + lb.min + ", max " + lb.max + ")\n" +
         "LIGHT server median/p95: " + ls.median + "/" + ls.p95 + " ms\n" +
         "SHEETS browser median/p95: " + sb.median + "/" + sb.p95 + " ms (min " + sb.min + ", max " + sb.max + ")\n" +
