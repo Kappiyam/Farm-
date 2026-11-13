@@ -25,6 +25,12 @@ jobs:
         working-directory: .
 
     steps:
+      - name: Restrict release branch
+        if: ${{ github.ref != 'refs/heads/foundation/bootstrap' }}
+        run: |
+          echo "::error::Deployments are permitted only from foundation/bootstrap."
+          exit 1
+
       - name: Check out approved source
         uses: actions/checkout@v4
 
