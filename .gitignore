@@ -1,0 +1,16 @@
+﻿# Google Apps Script local configuration
+.clasp.json
+.clasprc.json
+
+# Credentials and environment variables
+.env
+.env.*
+!.env.example
+
+# Node dependencies
+node_modules/
+
+# Local development files
+.DS_Store
+Thumbs.db
+*.log
