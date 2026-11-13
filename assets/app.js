@@ -61,38 +61,63 @@
     if (name === "overview") $("#check-api").addEventListener("click", checkApi);
   }
 
-  async function checkApi() {
+  function checkApi() {
     const status = $("#api-status");
     const button = $("#check-api");
     if (!config.apiUrl) {
-      status.className = "connection bad";
-      status.innerHTML = '<i class="connection-dot"></i><span>API URL is not configured in config.js</span>';
+      setStatus(status, "bad", "API URL is not configured in config.js");
       return;
     }
+
     button.disabled = true;
     button.textContent = "Checking…";
-    status.className = "connection";
-    status.innerHTML = '<i class="connection-dot"></i><span>Contacting backend…</span>';
-    try {
-      const response = await fetch(config.apiUrl, { method: "GET", redirect: "follow", cache: "no-store" });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const result = await response.json();
-      if (!result.ok || result.service !== "farm-management-api") throw new Error("Unexpected API response");
-      status.className = "connection good";
-      status.innerHTML = '<i class="connection-dot"></i><span>Connected · API ' + escapeHtml(result.version || "unknown") + '</span>';
-    } catch (error) {
-      status.className = "connection bad";
-      status.innerHTML = '<i class="connection-dot"></i><span>Connection failed · ' + escapeHtml(error.message) + '</span>';
-    } finally {
+    setStatus(status, "", "Contacting backend…");
+
+    const callbackName = "FarmAppHealthCallback";
+    const script = document.createElement("script");
+    let settled = false;
+    const timeoutId = window.setTimeout(() => finish(new Error("Request timed out")), 12000);
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      script.remove();
+      try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
       button.disabled = false;
       button.textContent = "Check connection";
     }
+
+    function finish(error, result) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) {
+        setStatus(status, "bad", "Connection failed · " + error.message);
+        return;
+      }
+      if (!result || !result.ok || result.service !== "farm-management-api" ||
+          result.status !== "database_connected") {
+        setStatus(status, "bad", "Backend responded, but database verification failed");
+        return;
+      }
+      setStatus(status, "good", "Connected · API " + (result.version || "unknown") +
+        " · " + (result.databaseName || "Database ready"));
+    }
+
+    window[callbackName] = (result) => finish(null, result);
+    script.onerror = () => finish(new Error("Unable to load Apps Script health response"));
+    const separator = config.apiUrl.includes("?") ? "&" : "?";
+    script.src = config.apiUrl + separator + "callback=" + callbackName +
+      "&_=" + Date.now();
+    document.head.appendChild(script);
   }
 
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, (char) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    })[char]);
+  function setStatus(element, state, message) {
+    element.className = "connection" + (state ? " " + state : "");
+    const icon = document.createElement("i");
+    icon.className = "connection-dot";
+    const label = document.createElement("span");
+    label.textContent = message;
+    element.replaceChildren(icon, label);
   }
 
   document.querySelectorAll("[data-view]").forEach((button) => {
