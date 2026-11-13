@@ -52,7 +52,7 @@ jobs:
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
           node -e 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.clasprc.json", "utf8"));'
-          printf '{"scriptId":"%s","rootDir":"backend"}\\n' "$SCRIPT_ID" > .clasp.json
+          printf '{"scriptId":"%s","rootDir":"backend"}\n' "$SCRIPT_ID" > .clasp.json
 
       - name: Validate source files
         run: |
