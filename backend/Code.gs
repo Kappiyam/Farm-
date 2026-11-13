@@ -7,7 +7,7 @@
  * This function creates missing tabs only; it never clears existing data.
  */
 
-const APP_VERSION = "0.3.0";
+const APP_VERSION = "0.4.0";
 const APP_SERVICE = "farm-management-api";
 const SCHEMA_VERSION = "0.1.0";
 
@@ -242,4 +242,82 @@ function parseRequest_(event) {
 function jsonResponse_(value) {
   return ContentService.createTextOutput(JSON.stringify(value))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+
+/**
+ * Multi-farm foundation migration.
+ * Safe, additive only: creates missing organisation/farm access tabs and appends
+ * missing Farms columns. It never clears, renames, or rewrites existing records.
+ * Run upgradeMultiFarmSchema() manually once after deploying this version.
+ */
+const MULTI_FARM_TABLE_SCHEMAS = Object.freeze({
+  Organizations: ["organization_id", "organization_name", "organization_code", "status", "created_at", "updated_at"],
+  OrganizationUsers: ["organization_user_id", "organization_id", "user_id", "membership_role", "status", "created_at", "updated_at"],
+  FarmMemberships: ["farm_membership_id", "farm_id", "user_id", "role_id", "status", "created_at", "updated_at"],
+  FarmSettings: ["farm_setting_id", "farm_id", "setting_key", "setting_value", "updated_at"]
+});
+
+const FARM_ADDITIONAL_COLUMNS = [
+  "organization_id", "country_code", "timezone", "default_language",
+  "currency_code", "area_unit", "farm_address", "contact_name",
+  "contact_phone", "contact_email"
+];
+
+function upgradeMultiFarmSchema() {
+  const started = Date.now();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("No active spreadsheet. Open this bound script from the target database.");
+
+  const createdTabs = [];
+  const appendedFarmColumns = [];
+
+  Object.keys(MULTI_FARM_TABLE_SCHEMAS).forEach(function(tableName) {
+    const headers = MULTI_FARM_TABLE_SCHEMAS[tableName];
+    let sheet = ss.getSheetByName(tableName);
+    if (!sheet) {
+      sheet = ss.insertSheet(tableName);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+      createdTabs.push(tableName);
+      return;
+    }
+    ensureTrailingHeaders_(sheet, headers, tableName);
+  });
+
+  const farmsSheet = ss.getSheetByName("Farms");
+  if (!farmsSheet) throw new Error("Farms tab is missing. Run the original database setup first.");
+  ensureTrailingHeaders_(farmsSheet, FARM_ADDITIONAL_COLUMNS, "Farms");
+  FARM_ADDITIONAL_COLUMNS.forEach(function(header) { appendedFarmColumns.push(header); });
+
+  const result = {
+    ok: true,
+    schemaVersion: "0.2.0",
+    appVersion: APP_VERSION,
+    createdTabs: createdTabs,
+    verifiedTabs: Object.keys(MULTI_FARM_TABLE_SCHEMAS),
+    farmColumnsVerified: appendedFarmColumns,
+    elapsedMs: Date.now() - started
+  };
+  console.log(JSON.stringify(result));
+  return result;
+}
+
+/**
+ * Appends only absent headers. Existing columns and row data are untouched.
+ * If a requested header already exists, it is left in place.
+ */
+function ensureTrailingHeaders_(sheet, requiredHeaders, tableName) {
+  const lastColumn = sheet.getLastColumn();
+  const existing = lastColumn > 0
+    ? sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0].filter(String)
+    : [];
+  const missing = requiredHeaders.filter(function(header) {
+    return existing.indexOf(header) === -1;
+  });
+  if (missing.length) {
+    sheet.getRange(1, lastColumn + 1, 1, missing.length).setValues([missing]);
+    if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
+  }
+  return { table: tableName, appended: missing };
 }
