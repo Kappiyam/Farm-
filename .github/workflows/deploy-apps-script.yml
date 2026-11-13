@@ -19,6 +19,7 @@ jobs:
   deploy:
     name: Deploy approved Apps Script release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: apps-script-production
     defaults:
       run:
@@ -54,6 +55,7 @@ jobs:
           mkdir -p "$HOME"
           printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
+          node -e 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.clasprc.json", "utf8"));'
           printf '{"scriptId":"%s","rootDir":"backend"}\n' "$SCRIPT_ID" > .clasp.json
 
       - name: Validate deployment inputs
@@ -61,8 +63,13 @@ jobs:
           DEPLOYMENT_ID: ${{ vars.SCRIPT_DEPLOYMENT_ID }}
           RELEASE_NOTE: ${{ inputs.release_note }}
         run: |
+          EXPECTED_DEPLOYMENT_ID="AKfycbzXgbemUlWcrufoA4s_316bPm6MM7nn3P8wuM8VIADOZxJCqZK5sPqOLxv4SiPgZVrRVg"
           if [ -z "$DEPLOYMENT_ID" ]; then
             echo "::error::Environment variable SCRIPT_DEPLOYMENT_ID is not configured."
+            exit 1
+          fi
+          if [ "$DEPLOYMENT_ID" != "$EXPECTED_DEPLOYMENT_ID" ]; then
+            echo "::error::Deployment ID does not match the verified existing application deployment."
             exit 1
           fi
           test -f backend/appsscript.json
