@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{font-family:Inter,Arial,sans-serif;color:#183b30;background:#f4f7f4}
+    *{box-sizing:border-box}body{margin:0}.shell{display:flex;min-height:100vh}
+    aside{width:220px;background:#183b30;color:#fff;padding:24px 16px}
+    .brand{font-size:18px;font-weight:700;margin:0 8px 30px}.nav{display:grid;gap:8px}
+    .nav button{border:0;background:transparent;color:#dce9df;text-align:left;padding:12px;border-radius:8px;font-size:14px;cursor:pointer}
+    .nav button.active,.nav button:hover{background:#315b49;color:#fff}
+    main{flex:1;min-width:0;padding:28px;max-width:1100px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+    h1{font-size:23px;margin:0}h2{font-size:20px;margin:0 0 8px}h3{font-size:16px;margin:0}
+    p{color:#64766d;line-height:1.55}.tag{font-size:12px;color:#55715f;background:#edf4ee;padding:5px 9px;border-radius:20px}
+    .welcome,.panel{background:#fff;border:1px solid #e0e8e1;border-radius:13px;padding:20px;margin-bottom:16px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .button{background:#205d48;color:white;border:0;border-radius:8px;padding:11px 16px;font-weight:600;cursor:pointer}
+    .button:disabled{opacity:.6;cursor:wait}
+    .connection{margin-top:14px;padding:12px;background:#f3f6f3;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-line;overflow-wrap:anywhere}
+    .connection.good{background:#eaf5ed;color:#205d48}.connection.bad{background:#fff0ed;color:#a33d2e}
+    .steps{display:grid;gap:15px;margin-top:18px}.step{display:flex;gap:12px;align-items:flex-start}
+    .step-no{background:#edf4ee;color:#205d48;border-radius:8px;padding:7px 10px}.step span{display:block;color:#718178;font-size:13px;margin-top:4px}
+    .notice{font-size:13px;color:#64766d;padding:14px 4px}
+    @media(max-width:700px){.shell{display:block}aside{width:auto;padding:14px}.brand{margin:0 0 12px}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding:18px}.grid{grid-template-columns:1fr}header{margin-bottom:16px}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">Kappiyam · Farm Management</div>
+    <nav class="nav">
+      <button class="active" data-view="overview">Overview</button>
+      <button data-view="farm-setup">Farm setup</button>
+    </nav>
+  </aside>
+  <main>
+    <header><h1 id="page-title">Overview</h1><span class="tag">Native preview · 0.1</span></header>
+    <section id="content"></section>
+  </main>
+</div>
+<script>
+  const content = document.getElementById("content");
+  const pageTitle = document.getElementById("page-title");
+  const buttons = [...document.querySelectorAll("[data-view]")];
+
+  function render(view) {
+    buttons.forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    pageTitle.textContent = view === "farm-setup" ? "Farm setup" : "Overview";
+    if (view === "farm-setup") {
+      content.innerHTML = `
+        <section class="welcome"><h2>Farm configuration profile</h2>
+          <p>This is a preview of the native application shell. The farm identity, locale, timezone, measurement units and operating defaults will be configured here in the next milestone.</p>
+        </section>
+        <section class="panel"><h3>Configuration sections</h3>
+          <div class="steps">
+            <div class="step"><b class="step-no">1</b><div><strong>Farm identity</strong><span>Farm name, code and contact details</span></div></div>
+            <div class="step"><b class="step-no">2</b><div><strong>Locale and units</strong><span>Country, timezone, language, currency and measurement units</span></div></div>
+            <div class="step"><b class="step-no">3</b><div><strong>Operational defaults</strong><span>Calendar, crop and task defaults</span></div></div>
+          </div>
+        </section>`;
+      return;
+    }
+    content.innerHTML = `
+      <section class="welcome"><h2>Build your farm workspace</h2>
+        <p>This is the native Apps Script version of the application shell. It uses the same Google Sheets database and calls server functions directly through google.script.run.</p>
+      </section>
+      <div class="grid">
+        <section class="panel">
+          <div class="panel-head"><h3>Backend connection</h3><span class="tag">Native</span></div>
+          <p>Check the application server and its bound database connection.</p>
+          <div id="status" class="connection">Connection not checked</div>
+          <button id="check" class="button" onclick="checkConnection()">Check connection</button>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h3>Implementation sequence</h3><span class="tag">Planned</span></div>
+          <div class="steps">
+            <div class="step"><b class="step-no">1</b><div><strong>Application foundation</strong><span>Shell, configuration, API and access control</span></div></div>
+            <div class="step"><b class="step-no">2</b><div><strong>Farm structure</strong><span>Farm, sites, fields and plots</span></div></div>
+            <div class="step"><b class="step-no">3</b><div><strong>Crop management</strong><span>Crop masters, varieties and crop cycles</span></div></div>
+          </div>
+        </section>
+      </div>
+      <div class="notice">Preview only. Authentication and farm records are not enabled in this prototype.</div>`;
+  }
+
+  function checkConnection() {
+    const status = document.getElementById("status");
+    const button = document.getElementById("check");
+    button.disabled = true;
+    button.textContent = "Checking…";
+    status.className = "connection";
+    status.textContent = "Calling Apps Script directly…";
+    const started = performance.now();
+    google.script.run
+      .withSuccessHandler(result => {
+        const elapsed = Math.round(performance.now() - started);
+        status.className = "connection good";
+        status.textContent = "Connected · API " + result.version +
+          " · " + result.databaseName + " · " + elapsed + " ms";
+        button.disabled = false;
+        button.textContent = "Check connection";
+      })
+      .withFailureHandler(error => {
+        status.className = "connection bad";
+        status.textContent = "Connection failed · " + (error && error.message ? error.message : error);
+        button.disabled = false;
+        button.textContent = "Check connection";
+      })
+      .nativeAppOverview();
+  }
+
+  buttons.forEach(button => button.addEventListener("click", () => render(button.dataset.view)));
+  render("overview");
+</script>
+</body>
+</html>
