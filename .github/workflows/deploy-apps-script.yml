@@ -1,10 +1,10 @@
-name: Deploy Apps Script
+name: Promote uploaded Apps Script source to production
 
 on:
   workflow_dispatch:
     inputs:
       release_note:
-        description: "Short description for this Apps Script release"
+        description: "Short description for this production deployment"
         required: true
         type: string
 
@@ -77,10 +77,7 @@ jobs:
           test -f backend/App.html
           echo "Source files and target deployment are configured."
 
-      - name: Upload Apps Script source
-        run: npx --yes @google/clasp@3.4.1 push --force
-
-      - name: Update existing web app deployment
+      - name: Deploy previously uploaded source to the existing web app deployment
         env:
           DEPLOYMENT_ID: ${{ vars.SCRIPT_DEPLOYMENT_ID }}
           RELEASE_NOTE: ${{ inputs.release_note }}
