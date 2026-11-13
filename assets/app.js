@@ -160,7 +160,7 @@
       const sn = stats(sheetName);
 
       const summary =
-        "20/20 requests passed · API " + apiVersion + "\n" +
+        (lightBrowser.length + sheetBrowser.length) + "/20 requests passed · API " + apiVersion + "\n" +
         "LIGHT browser median/p95: " + lb.median + "/" + lb.p95 + " ms (min " + lb.min + ", max " + lb.max + ")\n" +
         "LIGHT server median/p95: " + ls.median + "/" + ls.p95 + " ms\n" +
         "SHEETS browser median/p95: " + sb.median + "/" + sb.p95 + " ms (min " + sb.min + ", max " + sb.max + ")\n" +
