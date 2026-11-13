@@ -76,6 +76,7 @@
     const callbackName = "FarmAppHealthCallback";
     const script = document.createElement("script");
     let settled = false;
+    const requestStartedAt = performance.now();
     const timeoutId = window.setTimeout(() => finish(new Error("Request timed out")), 12000);
 
     function cleanup() {
@@ -99,8 +100,9 @@
         setStatus(status, "bad", "Backend responded, but database verification failed");
         return;
       }
+      const roundTripMs = Math.round(performance.now() - requestStartedAt);
       setStatus(status, "good", "Connected · API " + (result.version || "unknown") +
-        " · " + (result.databaseName || "Database ready"));
+        " · " + (result.databaseName || "Database ready") + " · " + roundTripMs + " ms");
     }
 
     window[callbackName] = (result) => finish(null, result);
