@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body{font:15px Arial,sans-serif;max-width:900px;margin:32px auto;padding:0 18px;color:#183b30;background:#f5f7f4}
+      h1{font-size:24px}p{line-height:1.5;color:#52665e}
+      .panel{background:white;border:1px solid #d9e4dc;border-radius:12px;padding:20px;margin:18px 0}
+      button{background:#205d48;color:white;border:0;border-radius:8px;padding:12px 18px;font-weight:600;cursor:pointer}
+      button:disabled{opacity:.6;cursor:wait}
+      pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef4ef;border-radius:8px;padding:14px;line-height:1.55}
+      .muted{font-size:13px;color:#687b72}
+    </style>
+  </head>
+  <body>
+    <h1>Farm Management — Native API Benchmark</h1>
+    <p>This isolated diagnostic compares Apps Script HTML Service and <code>google.script.run</code> with the GitHub Pages JSONP benchmark. It sends 20 sequential read-only calls and does not access farm records other than reading the spreadsheet name in the spreadsheet probe.</p>
+    <div class="panel">
+      <button id="run" onclick="runBenchmark()">Run native 20-request benchmark</button>
+      <p id="progress" class="muted">Ready. Keep this page open while the test runs.</p>
+      <pre id="result">No benchmark run yet.</pre>
+    </div>
+    <script>
+      let calls = 0;
+      function callServer(method) {
+        return new Promise((resolve, reject) => {
+          const started = performance.now();
+          const runner = google.script.run
+            .withSuccessHandler(value => resolve({
+              value,
+              browserRoundTripMs: Math.round(performance.now() - started)
+            }))
+            .withFailureHandler(error => reject(new Error(error && error.message ? error.message : String(error))));
+          runner[method]();
+        });
+      }
+
+      function percentile(values, fraction) {
+        const sorted = values.slice().sort((a,b) => a-b);
+        return sorted[Math.max(0, Math.ceil(fraction * sorted.length)-1)];
+      }
+      function stats(values) {
+        return {
+          median: percentile(values,.5),
+          p95: percentile(values,.95),
+          min: Math.min(...values),
+          max: Math.max(...values)
+        };
+      }
+
+      async function runBenchmark() {
+        const button = document.getElementById("run");
+        const progress = document.getElementById("progress");
+        const output = document.getElementById("result");
+        button.disabled = true;
+        const lightBrowser=[], lightServer=[], sheetBrowser=[], sheetServer=[], sheetOpen=[], sheetName=[];
+        let version = "unknown";
+        try {
+          for (let i=0;i<10;i++) {
+            progress.textContent = "Light probe " + (i+1) + " of 10…";
+            const light = await callServer("nativeProbeLight");
+            if (!light.value || !light.value.ok || light.value.probe !== "light") throw new Error("Light probe " + (i+1) + " failed");
+            version = light.value.version || version;
+            lightBrowser.push(light.browserRoundTripMs);
+            lightServer.push(Number(light.value.serverTotalMs)||0);
+
+            progress.textContent = "Spreadsheet probe " + (i+1) + " of 10…";
+            const sheet = await callServer("nativeProbeSheet");
+            if (!sheet.value || !sheet.value.ok || sheet.value.status !== "database_connected") throw new Error("Spreadsheet probe " + (i+1) + " failed");
+            sheetBrowser.push(sheet.browserRoundTripMs);
+            sheetServer.push(Number(sheet.value.serverTotalMs)||0);
+            sheetOpen.push(Number(sheet.value.spreadsheetOpenMs)||0);
+            sheetName.push(Number(sheet.value.spreadsheetNameMs)||0);
+          }
+
+          const lb=stats(lightBrowser), ls=stats(lightServer), sb=stats(sheetBrowser), ss=stats(sheetServer);
+          const so=stats(sheetOpen), sn=stats(sheetName);
+          const report =
+            "20/20 requests passed · API " + version + "\n" +
+            "LIGHT browser median/p95: " + lb.median + "/" + lb.p95 + " ms (min " + lb.min + ", max " + lb.max + ")\n" +
+            "LIGHT server median/p95: " + ls.median + "/" + ls.p95 + " ms\n" +
+            "SHEETS browser median/p95: " + sb.median + "/" + sb.p95 + " ms (min " + sb.min + ", max " + sb.max + ")\n" +
+            "SHEETS server median/p95: " + ss.median + "/" + ss.p95 + " ms\n" +
+            "SHEETS open median: " + so.median + " ms · name median: " + sn.median + " ms";
+          output.textContent = report;
+          progress.textContent = "Completed successfully. Benchmark is read-only.";
+          console.log("NATIVE_API_LATENCY_BENCHMARK", JSON.stringify({
+            lightBrowser:lb, lightServer:ls, sheetBrowser:sb, sheetServer:ss,
+            spreadsheetOpen:so, spreadsheetName:sn
+          }));
+        } catch (error) {
+          output.textContent = "Benchmark failed: " + error.message +
+            "\nCompleted light requests: " + lightBrowser.length +
+            "\nCompleted spreadsheet requests: " + sheetBrowser.length;
+          progress.textContent = "Test stopped after an error.";
+        } finally {
+          button.disabled = false;
+        }
+      }
+    </script>
+  </body>
+</html>
