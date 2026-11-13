@@ -1,0 +1,76 @@
+name: Upload Apps Script source (no deployment)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_note:
+        description: "Short description for this source upload"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-source-upload
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Upload source to Apps Script HEAD only
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: apps-script-production
+
+    steps:
+      - name: Restrict upload branch
+        if: ${{ github.ref != 'refs/heads/foundation/bootstrap' }}
+        run: |
+          echo "::error::Uploads are permitted only from foundation/bootstrap."
+          exit 1
+
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pinned clasp
+        run: npm install --global @google/clasp@3.4.1
+
+      - name: Configure clasp authentication
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: "1nOYC75sL8Q0NZW1umQwC9JUUFiovi8FDGpBKnJixVdyGjur7Y0fo1IoL"
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::GitHub secret CLASPRC_JSON is not configured."
+            exit 1
+          fi
+          printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          node -e 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.clasprc.json", "utf8"));'
+          printf '{"scriptId":"%s","rootDir":"backend"}\\n' "$SCRIPT_ID" > .clasp.json
+
+      - name: Validate source files
+        run: |
+          test -f backend/appsscript.json
+          test -f backend/Code.gs
+          test -f backend/App.html
+          test -f backend/NativeBenchmark.html
+          echo "Required source files found."
+
+      - name: Upload source only (does not create a deployment version)
+        run: npx --yes @google/clasp@3.4.1 push --force
+
+      - name: Report uploaded commit
+        env:
+          UPLOAD_NOTE: ${{ inputs.upload_note }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          echo "Source uploaded to Apps Script HEAD."
+          echo "No web app deployment was created or updated."
+          echo "Commit: $COMMIT_SHA"
+          echo "Note: $UPLOAD_NOTE"
