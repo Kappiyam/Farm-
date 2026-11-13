@@ -1,13 +1,13 @@
 /**
  * Farm Management API — database foundation
- * Version: 0.2.0
+ * Version: 0.2.1
  *
  * Bound to the Farm Management Database spreadsheet.
  * Run setupDatabase() manually once from the Apps Script editor.
  * This function creates missing tabs only; it never clears existing data.
  */
 
-const APP_VERSION = "0.2.0";
+const APP_VERSION = "0.2.1";
 const APP_SERVICE = "farm-management-api";
 const SCHEMA_VERSION = "0.1.0";
 
@@ -84,8 +84,26 @@ function setupDatabase() {
   return result;
 }
 
-function doGet() {
-  return jsonResponse_(health_());
+/**
+ * JSON remains the default browser/direct response.
+ * JSONP is supported only for the public, read-only health check because
+ * Apps Script ContentService redirects can prevent cross-origin fetch().
+ * Never expose authenticated records or write actions through JSONP.
+ */
+function doGet(event) {
+  const result = health_();
+  const callback = event && event.parameter ? String(event.parameter.callback || "") : "";
+
+  if (callback) {
+    if (!/^[A-Za-z_$][0-9A-Za-z_$]{0,63}$/.test(callback)) {
+      return jsonResponse_({ ok: false, code: "BAD_CALLBACK", error: "Invalid callback name" });
+    }
+    return ContentService
+      .createTextOutput(callback + "(" + JSON.stringify(result) + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
+  return jsonResponse_(result);
 }
 
 function doPost(event) {
