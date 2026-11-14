@@ -279,3 +279,38 @@ function erpCreateInvoiceFromOrder(orderId,dueDate){
   return {ok:true,invoice:invoice,lines:inserted.length,total:invoice.total_amount,currency:order.currency_code,
     resumedDraft:invoices.some(x=>x.invoice_id===invoice.invoice_id&&String(x.status).toLowerCase()==="draft")};
 }
+
+
+/** Customer receipt tied to a specific issued invoice; overpayment is rejected. */
+function erpRecordCustomerPayment(invoiceId,payment,idempotencyKey){
+  if(!idempotencyKey)throw new Error("A stable payment request key is required.");
+  if(!payment||typeof payment!=="object")throw new Error("Payment details are required.");
+  const invoice=erpGetRecord_("Invoices",invoiceId);
+  if(["draft","cancelled","void"].includes(String(invoice.status||"").toLowerCase()))
+    throw new Error("Only an issued invoice can receive a payment.");
+  const amount=Number(payment.amount);
+  if(!(amount>0)||!isFinite(amount))throw new Error("Payment amount must be greater than zero.");
+  const currentPayments=erpRead_("Payments",{limit:1000,filter:{invoice_id:invoiceId}}).rows;
+  const alreadyPaid=currentPayments.reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+  const balance=Math.max(0,(Number(invoice.total_amount)||0)-alreadyPaid);
+  const priorKey=erpFindOne_("IdempotencyKeys",{idempotency_key:idempotencyKey});
+  if(!priorKey&&amount>balance+0.000001)
+    throw new Error("Payment exceeds the outstanding invoice balance of "+balance+".");
+  const record={
+    farm_id:invoice.farm_id,customer_id:invoice.customer_id,invoice_id:invoiceId,
+    payment_date:payment.payment_date||new Date(),amount:amount,currency_code:invoice.currency_code,
+    payment_method:payment.payment_method||"cash",account_id:payment.account_id||"",
+    reference_number:payment.reference_number||"",status:"received",
+    notes:payment.notes||""
+  };
+  const posted=erpPostLedger("Payments",record,idempotencyKey);
+  const refreshed=erpRead_("Payments",{limit:1000,filter:{invoice_id:invoiceId}}).rows;
+  const paid=refreshed.reduce((sum,p)=>sum+(Number(p.amount)||0),0);
+  const outstanding=Math.max(0,(Number(invoice.total_amount)||0)-paid);
+  const status=outstanding<=0.000001?"paid":paid>0?"partially_paid":"issued";
+  erpSetCalculatedField_("Invoices",invoiceId,"paid_amount",paid,"Reconciled from invoice payment ledger");
+  erpSetCalculatedField_("Invoices",invoiceId,"balance_due",outstanding,"Reconciled from invoice payment ledger");
+  erpSave("Invoices",{invoice_id:invoiceId,status:status});
+  return {ok:true,duplicate:!!posted.duplicate,paymentId:posted.id,invoiceId:invoiceId,
+    invoiceStatus:status,paid:paid,balanceDue:outstanding,currency:invoice.currency_code};
+}
