@@ -56,7 +56,7 @@ The existing static frontend has only Overview and Farm Setup placeholder views.
 6. **Production release:** Keep current production deployment and database separate from development. Development source uploads are not production releases.
 7. **Branch divergence:** Reconcile the three commits on main deliberately before any future merge; do not merge branches wholesale.
 
-## Recommended build sequence
+## Follow-on work added after this audit\n\n- Added `docs/TECHNICAL_ARCHITECTURE.md` with the initial deployment topology, owner-only access boundary, data-model domains, API conventions, write-safety/audit rules, backup/migration approach and release gates.\n- Added the read-only configuration preview to the native Farm Setup screen. It does not create organisation/farm records.\n\n## Recommended build sequence
 
 ### Foundation release
 - Native HTML Service application shell with responsive navigation and consistent module layout.
