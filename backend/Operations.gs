@@ -7,6 +7,20 @@ function erpFindOne_(table,filter){
   return found.length?found[0]:null;
 }
 
+function erpUpdateStockLotSnapshot_(lotId){
+  const lot=erpFindOne_("StockLots",{lot_id:String(lotId)});
+  if(!lot)return;
+  const balance=erpStockBalance(lot.item_id,lot.lot_id,lot.farm_id);
+  const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName("StockLots");
+  if(!sh||sh.getLastRow()<2)return;
+  const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+  const keyCol=headers.indexOf("lot_id")+1,quantityCol=headers.indexOf("quantity_available")+1;
+  if(!keyCol||!quantityCol)return;
+  const ids=sh.getRange(2,keyCol,sh.getLastRow()-1,1).getDisplayValues().flat();
+  const index=ids.indexOf(String(lotId));
+  if(index>=0)sh.getRange(index+2,quantityCol).setValue(balance);
+}
+
 function erpProduceLotBalance_(lotId){
   const moves=erpRead_("ProduceLotMovements",{limit:1000}).rows.filter(m=>String(m.produce_lot_id)===String(lotId));
   return moves.reduce((sum,m)=>{
