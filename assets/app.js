@@ -1,200 +1,75 @@
 (() => {
   "use strict";
-  const config = window.FARM_APP_CONFIG || {};
-  const $ = (selector) => document.querySelector(selector);
+  const $ = s => document.querySelector(s);
   const content = $("#app-content");
-  const appName = config.appName || "Farm Management";
-  let probeSequence = 0;
-  $("#brand-name").textContent = appName;
-  document.title = appName;
-
-  const views = {
-    overview: { title: "Overview", render: renderOverview },
-    "farm-setup": { title: "Farm setup", render: renderFarmSetup }
+  const state = {view:"dashboard",language:localStorage.getItem("farmerp-language")||"en",farm:"",records:{},search:"",demo:true};
+  const modules = [
+    ["dashboard","Dashboard","Overview","▦"],["calendar","Calendar & journal","Overview","▣"],
+    ["farms","Farms & structure","Farm setup","⌂"],["masters","Master data","Farm setup","◇"],
+    ["demand","Demand & production plan","Production","↗"],["crops","Crop cycles","Production","♧"],
+    ["tasks","Tasks & workforce","Operations","☷"],["scouting","Scouting & observations","Operations","◎"],
+    ["irrigation","Irrigation & applications","Operations","≋"],["inventory","Inventory & procurement","Supply","▤"],
+    ["harvest","Harvest & post-harvest","Supply","♨"],["sales","Customers & sales","Commercial","◈"],
+    ["finance","Finance & profitability","Commercial","₹"],["assets","Assets & maintenance","Resources","⚙"],
+    ["reports","Reports & analytics","Management","▥"],["settings","Settings & access","Management","☰"]
+  ];
+  const schemas = {
+    farms:["Farm name","Farm code","Country","Timezone","Language","Currency","Area unit","Address","Status"],
+    fields:["Field / site name","Code","Farm","Area","Area unit","Production type","Status"],
+    plots:["Plot name","Code","Field","Area","Area unit","Soil type","Irrigation zone","Status"],
+    crops:["Crop name","Category","Default unit","Status"],
+    varieties:["Variety name","Crop","Duration (days)","Propagation","Status"],
+    cycles:["Cycle name","Farm","Plot","Crop","Variety","Planting date","Expected harvest","Area","Status"],
+    tasks:["Task title","Farm","Plot","Crop cycle","Assigned team","Priority","Due date","Status"],
+    people:["Name","Phone","Role","Language","Wage basis","Wage rate","Status"],
+    observations:["Date","Farm","Plot","Crop cycle","Category","Severity","Description","Recorded by"],
+    irrigation:["Date","Farm","Plot / valve","Water source","Start time","Duration (min)","Volume","Unit"],
+    inventory:["Item name","Category","Base unit","Reorder level","Storage location","Status"],
+    procurement:["Supplier","Order date","Expected date","Items","Total amount","Status"],
+    harvest:["Harvest date","Farm","Plot","Crop cycle","Grade","Quantity","Unit","Disposition"],
+    customers:["Customer name","Type","Contact","Phone","Email","Address","Payment terms"],
+    orders:["Order number","Customer","Order date","Required date","Items","Total","Status"],
+    invoices:["Invoice number","Customer","Invoice date","Due date","Total","Paid","Status"],
+    expenses:["Date","Category","Description","Amount","Account","Cost class","Farm / plot"],
+    assets:["Asset name","Category","Asset code","Purchase date","Cost","Location","Status"],
+    events:["Event title","Type","Start date/time","End date/time","Location","Recurrence","Participants"],
+    units:["Unit name","Symbol","Dimension","Base unit","Conversion factor","Status"],
+    suppliers:["Supplier name","Contact","Phone","Email","Address","Status"]
   };
-
-  function renderOverview() {
-    return `
-      <div class="welcome"><h2>Build your farm workspace</h2>
-        <p>This is the clean application foundation. Farm-specific records, workflows and terminology will be introduced through configuration rather than embedded in the application.</p>
-      </div>
-      <div class="grid">
-        <article class="panel">
-          <div class="panel-head"><h3>Backend connection</h3><span class="tag">Foundation</span></div>
-          <p>Run 10 repeated lightweight API probes and 10 spreadsheet connection probes to calculate median and p95 timings.</p>
-          <div id="api-status" class="connection"><i class="connection-dot"></i><span>Diagnostics not run</span></div>
-          <div style="margin-top:14px"><button id="check-api" class="button">Run 20-request benchmark</button></div>
-        </article>
-        <article class="panel">
-          <div class="panel-head"><h3>Implementation sequence</h3><span class="tag">Planned</span></div>
-          <div class="steps">
-            <div class="step"><b class="step-no">1</b><div><strong>Application foundation</strong><span>Shell, configuration, API and access control</span></div></div>
-            <div class="step"><b class="step-no">2</b><div><strong>Farm structure</strong><span>Farm, sites, fields and plots</span></div></div>
-            <div class="step"><b class="step-no">3</b><div><strong>Crop management</strong><span>Crop masters, varieties and crop cycles</span></div></div>
-          </div>
-        </article>
-      </div>
-      <div class="notice">This diagnostic sends 20 sequential read-only health requests. It does not read farm records or write to the database.</div>`;
-  }
-
-  function renderFarmSetup() {
-    return `
-      <div class="welcome"><h2>Farm setup</h2><p>Farm-specific identity and operating settings will be stored separately from application code.</p></div>
-      <article class="panel">
-        <h3>Configuration profile</h3>
-        <p>The first setup module will capture the farm identity, locale, timezone, units and operational defaults.</p>
-        <div class="setup-list">
-          <div class="setup-row"><strong>Farm identity</strong><span>Next module</span></div>
-          <div class="setup-row"><strong>Country, timezone and locale</strong><span>Next module</span></div>
-          <div class="setup-row"><strong>Measurement units and currency</strong><span>Next module</span></div>
-          <div class="setup-row"><strong>Operational defaults</strong><span>Next module</span></div>
-        </div>
-      </article>`;
-  }
-
-  function showView(name) {
-    const view = views[name] || views.overview;
-    $("#page-title").textContent = view.title;
-    document.querySelectorAll("[data-view]").forEach((button) => {
-      button.classList.toggle("active", button.dataset.view === name);
-    });
-    content.innerHTML = view.render();
-    if (name === "overview") $("#check-api").addEventListener("click", runDiagnostics);
-  }
-
-  function loadJsonpProbe(probe) {
-    return new Promise((resolve, reject) => {
-      const callbackName = "FarmAppProbeCallback" + (++probeSequence);
-      const script = document.createElement("script");
-      const startedAt = performance.now();
-      let settled = false;
-      const timeoutId = window.setTimeout(() => finish(new Error("Timed out: " + probe)), 12000);
-
-      function cleanup() {
-        window.clearTimeout(timeoutId);
-        script.remove();
-        try { delete window[callbackName]; } catch (_) { window[callbackName] = undefined; }
-      }
-
-      function finish(error, result) {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        if (error) return reject(error);
-        resolve({
-          result: result,
-          browserRoundTripMs: Math.round(performance.now() - startedAt)
-        });
-      }
-
-      window[callbackName] = (result) => finish(null, result);
-      script.onerror = () => finish(new Error("Unable to load " + probe + " probe"));
-      const separator = config.apiUrl.includes("?") ? "&" : "?";
-      script.src = config.apiUrl + separator + "probe=" + encodeURIComponent(probe) +
-        "&callback=" + encodeURIComponent(callbackName) + "&_=" + Date.now() + "-" + probeSequence;
-      document.head.appendChild(script);
-    });
-  }
-
-  function percentile(values, fraction) {
-    const sorted = values.slice().sort((a, b) => a - b);
-    return sorted[Math.max(0, Math.ceil(fraction * sorted.length) - 1)];
-  }
-
-  function stats(values) {
-    return {
-      median: percentile(values, 0.5),
-      p95: percentile(values, 0.95),
-      min: Math.min.apply(null, values),
-      max: Math.max.apply(null, values)
-    };
-  }
-
-  async function runDiagnostics() {
-    const status = $("#api-status");
-    const button = $("#check-api");
-    if (!config.apiUrl) {
-      setStatus(status, "bad", "API URL is not configured in config.js");
-      return;
-    }
-
-    button.disabled = true;
-    button.textContent = "Testing…";
-    setStatus(status, "", "Running 20 sequential read-only requests. Please keep this page open…");
-
-    const lightBrowser = [];
-    const lightServer = [];
-    const sheetBrowser = [];
-    const sheetServer = [];
-    const sheetOpen = [];
-    const sheetName = [];
-    let apiVersion = "unknown";
-
-    try {
-      for (let i = 0; i < 10; i++) {
-        button.textContent = "Testing " + (i * 2 + 1) + " of 20…";
-        const light = await loadJsonpProbe("light");
-        if (!light.result.ok || light.result.probe !== "light") {
-          throw new Error("Light probe " + (i + 1) + " failed");
-        }
-        lightBrowser.push(light.browserRoundTripMs);
-        lightServer.push(Number(light.result.serverTotalMs) || 0);
-
-        button.textContent = "Testing " + (i * 2 + 2) + " of 20…";
-        const sheet = await loadJsonpProbe("sheet");
-        if (!sheet.result.ok || sheet.result.status !== "database_connected") {
-          throw new Error("Spreadsheet probe " + (i + 1) + " failed");
-        }
-        apiVersion = sheet.result.version || apiVersion;
-        sheetBrowser.push(sheet.browserRoundTripMs);
-        sheetServer.push(Number(sheet.result.serverTotalMs) || 0);
-        sheetOpen.push(Number(sheet.result.spreadsheetOpenMs) || 0);
-        sheetName.push(Number(sheet.result.spreadsheetNameMs) || 0);
-      }
-
-      const lb = stats(lightBrowser);
-      const ls = stats(lightServer);
-      const sb = stats(sheetBrowser);
-      const ss = stats(sheetServer);
-      const so = stats(sheetOpen);
-      const sn = stats(sheetName);
-
-      const summary =
-        (lightBrowser.length + sheetBrowser.length) + "/20 requests passed · API " + apiVersion + "\n" +
-        "LIGHT browser median/p95: " + lb.median + "/" + lb.p95 + " ms (min " + lb.min + ", max " + lb.max + ")\n" +
-        "LIGHT server median/p95: " + ls.median + "/" + ls.p95 + " ms\n" +
-        "SHEETS browser median/p95: " + sb.median + "/" + sb.p95 + " ms (min " + sb.min + ", max " + sb.max + ")\n" +
-        "SHEETS server median/p95: " + ss.median + "/" + ss.p95 + " ms\n" +
-        "SHEETS open median: " + so.median + " ms · name median: " + sn.median + " ms";
-      setStatus(status, "good", summary);
-      console.log("FARM_API_LATENCY_BENCHMARK " + JSON.stringify({
-        requestsPerProbe: 10,
-        lightBrowser: lb, lightServer: ls,
-        sheetBrowser: sb, sheetServer: ss,
-        spreadsheetOpen: so, spreadsheetName: sn
-      }));
-    } catch (error) {
-      setStatus(status, "bad", "Benchmark failed · " + error.message +
-        ". Completed light requests: " + lightBrowser.length +
-        "; completed spreadsheet requests: " + sheetBrowser.length);
-    } finally {
-      button.disabled = false;
-      button.textContent = "Run 20-request benchmark";
-    }
-  }
-
-  function setStatus(element, state, message) {
-    element.className = "connection" + (state ? " " + state : "");
-    const icon = document.createElement("i");
-    icon.className = "connection-dot";
-    const label = document.createElement("span");
-    label.textContent = message;
-    label.style.whiteSpace = "pre-line";
-    element.replaceChildren(icon, label);
-  }
-
-  document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => showView(button.dataset.view));
-  });
-  showView("overview");
+  const titles = {dashboard:"Today’s farm operations",calendar:"Calendar & activity journal",farms:"Farm structure",masters:"Master data",demand:"Demand-to-production planning",crops:"Crop cycles",tasks:"Tasks & workforce",scouting:"Scouting & observations",irrigation:"Irrigation & applications",inventory:"Inventory & procurement",harvest:"Harvest & post-harvest",sales:"Customers & sales",finance:"Finance & profitability",assets:"Assets & maintenance",reports:"Reports & analytics",settings:"Settings & access"};
+  const descriptions = {
+    dashboard:"A live operational picture across your farms, with priorities and exceptions in one place.",
+    calendar:"Schedule events independently from work tasks. Link tasks when an event requires action.",
+    farms:"Configure the organisation hierarchy, farms, sites, fields, plots, beds and infrastructure.",
+    masters:"Maintain reusable crops, varieties, people, units, suppliers, customers, products and operation types.",
+    demand:"Combine confirmed orders and forecasts, project available supply and calculate production gaps.",
+    crops:"Plan and track crop cycles, stages, propagation, intercrops, yield and crop loss.",
+    tasks:"Plan, assign and review work. Record actual participation and output separately from assignments.",
+    scouting:"Record plot-level observations, severity, extent, evidence and resulting recommendations.",
+    irrigation:"Record pump runs and plot/valve operations separately; link applications to treated plots.",
+    inventory:"Track procurement, receipts, lots, storage, issues, transfers, farm-made batches and stock counts.",
+    harvest:"Capture harvest by source, grade and disposition; maintain lot traceability through packing and dispatch.",
+    sales:"Manage customers, price lists, orders, fulfilment, dispatch, invoices, payments and returns.",
+    finance:"Record cash/bank movements, expenses, payables, receivables and transparent crop cost allocations.",
+    assets:"Register equipment and track usage, service, repairs, parts, costs and downtime.",
+    reports:"Analyse production, workforce, stock, sales, finance and asset performance with exportable detail.",
+    settings:"Configure users, roles, permissions, languages, units, farm defaults, audit and data tools."
+  };
+  const icons = {dashboard:"▦",calendar:"▣",farms:"⌂",masters:"◇",demand:"↗",crops:"♧",tasks:"☷",scouting:"◎",irrigation:"≋",inventory:"▤",harvest:"♨",sales:"◈",finance:"₹",assets:"⚙",reports:"▥",settings:"☰"};
+  const groups = [...new Set(modules.map(m=>m[2]))];
+  function escape(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+  function nav(){return groups.map(g=>'<div class="nav-group"><div class="nav-caption">'+escape(g)+'</div>'+modules.filter(m=>m[2]===g).map(m=>'<button class="nav-item '+(state.view===m[0]?'active':'')+'" data-view="'+m[0]+'"><span class="nav-icon">'+m[3]+'</span><span>'+escape(m[1])+'</span></button>').join("")+'</div>').join("");}
+  function shell(){document.querySelector(".sidebar").innerHTML='<a class="brand" href="#"><span class="brand-mark">F</span><span><strong>FarmERP</strong><small>Farm operations platform</small></span></a><nav class="nav-list">'+nav()+'</nav><div class="sidebar-foot"><span class="status-dot"></span><span>Workspace</span><span class="version">v1.0</span></div>';document.querySelector(".sidebar").querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>go(b.dataset.view));}
+  function go(v){state.view=v;state.search="";shell();render();}
+  function header(){return '<header class="topbar"><div class="mobile-brand">FarmERP</div><div class="top-title"><p class="eyebrow">FARM MANAGEMENT WORKSPACE</p><h1>'+escape(titles[state.view])+'</h1></div><div class="topbar-right"><select id="language" aria-label="Language"><option value="en">English</option><option value="ta">தமிழ்</option><option value="hi">हिन्दी</option></select><button class="icon-button" title="Notifications">♧</button><button class="avatar" title="User profile">U</button></div></header>';}
+  function metric(label,value,sub,icon){return '<article class="metric-card"><div class="metric-top"><span>'+label+'</span><b>'+icon+'</b></div><strong>'+value+'</strong><small>'+sub+'</small></article>';}
+  function dashboard(){return '<section class="welcome-row"><div><h2>Good day</h2><p>Here is your operational overview. Select a farm to focus the workspace.</p></div><div class="toolbar"><select aria-label="Select farm"><option>All farms</option></select><button class="button primary" data-action="quick-task">＋ New task</button></div></section><div class="metric-grid">'+metric("Open tasks","—","Assigned and in progress","☷")+metric("Overdue tasks","—","Needs attention","◷")+metric("Workforce today","—","Attendance recorded","♙")+metric("Harvest due","—","Next 7 days","♧")+metric("Low stock items","—","Below reorder level","▤")+metric("Open orders","—","Awaiting fulfilment","◈")+'</div><div class="dashboard-grid"><article class="panel span-2"><div class="panel-head"><div><h3>Today’s operations</h3><p>Prioritised work across farms and operational areas</p></div><button class="text-button" data-view="tasks">View tasks →</button></div><div class="empty-state"><div class="empty-icon">☷</div><strong>No operational records loaded</strong><span>Connect the application database to see assigned, due and blocked work here.</span></div></article><article class="panel"><div class="panel-head"><div><h3>Farm performance</h3><p>Production and cost overview</p></div></div><div class="empty-state compact"><div class="empty-icon">▥</div><strong>Awaiting farm data</strong><span>Metrics will appear when crop cycles and transactions are recorded.</span></div></article><article class="panel"><div class="panel-head"><div><h3>Alerts & exceptions</h3><p>Crop, irrigation, stock and finance</p></div></div><div class="empty-state compact"><div class="empty-icon">♧</div><strong>No alerts available</strong><span>Uninspected plots will not be treated as healthy.</span></div></article></div>';}
+  function toolbar(key){return '<div class="module-toolbar"><div class="search-wrap"><span>⌕</span><input id="record-search" placeholder="Search records…" value="'+escape(state.search)+'"></div><div class="toolbar-actions"><button class="button secondary" data-action="export">↓ Export</button><button class="button primary" data-action="new-record">＋ New record</button></div></div>';}
+  function modulePage(key){let label=key==="farms"?"Farm structure":key==="masters"?"Master data":titles[key];let tabs=({farms:["Farms","Sites / fields","Plots / beds","Infrastructure"],masters:["Crops","Varieties","People","Suppliers","Customers","Units"],tasks:["Task board","Task list","Templates","Attendance","Timesheets"],inventory:["Stock overview","Items","Lots / batches","Procurement","Movements","Stock counts"],sales:["Customers","Products","Price lists","Orders","Fulfilment","Invoices","Payments","Returns"],finance:["Overview","Income & expenses","Cash / bank","Payables","Receivables","Cost allocations","Crop profitability"],harvest:["Harvest sessions","Grades & sorting","Produce lots","Packing & processing","Storage","Dispatch"],irrigation:["Irrigation runs","Valve operations","Applications","Fertigation"],crops:["Crop cycles","Crop stages","Intercropping","Propagation","Yield & crop loss"],scouting:["Plot status","Observations","Recommendations","Crop loss"],demand:["Demand","Supply projection","Production gap","Readiness plan","Forecast versions"],calendar:["Calendar","Agenda","Activity journal"],assets:["Asset register","Usage log","Maintenance","Repairs & parts"],reports:["Production","Workforce","Inventory","Harvest & traceability","Sales","Finance","Assets"],settings:["Organisation","Users & roles","Permissions","Languages","Units","Farm defaults","Audit log","Import & data export"]})[key]||["Overview","Records","History"];let entity=({farms:"farms",masters:"crops",tasks:"tasks",inventory:"inventory",sales:"orders",finance:"expenses",harvest:"harvest",irrigation:"irrigation",crops:"cycles",scouting:"observations",assets:"assets",calendar:"events"})[key]||key;let fields=schemas[entity]||["Name","Code","Farm","Date","Status"];return '<section class="module-intro"><div><div class="breadcrumb">WORKSPACE / '+escape(key.toUpperCase())+'</div><h2>'+escape(titles[key])+'</h2><p>'+escape(descriptions[key])+'</p></div><span class="module-symbol">'+icons[key]+'</span></section><div class="tab-strip">'+tabs.map((t,i)=>'<button class="tab '+(!i?'selected':'')+'" data-tab="'+escape(t)+'">'+escape(t)+'</button>').join("")+'</div>'+toolbar(key)+'<article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+escape(tabs[0])+'</h3><p id="table-description">Manage records with validated relationships and a complete activity history.</p></div><span class="tag">Database connected at launch</span></div><div class="table-scroll"><table><thead><tr>'+fields.map(f=>'<th>'+escape(f)+'</th>').join("")+'</tr></thead><tbody id="records-body"><tr><td colspan="'+fields.length+'"><div class="empty-state"><div class="empty-icon">'+icons[key]+'</div><strong>Ready for records</strong><span>Records will be loaded from the configured farm database. No sample data is presented as real farm data.</span></div></td></tr></tbody></table></div><div class="table-foot"><span>Showing 0 records</span><div><button class="button ghost" disabled>Previous</button><button class="button ghost" disabled>Next</button></div></div></article>';}
+  function render(){content.innerHTML=state.view==="dashboard"?dashboard():modulePage(state.view);bind();}
+  function bind(){content.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>go(b.dataset.view));content.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{content.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("selected",x===b));$("#table-title").textContent=b.dataset.tab;});const search=$("#record-search");if(search)search.oninput=e=>state.search=e.target.value;const lang=$("#language");if(lang){lang.value=state.language;lang.onchange=e=>{state.language=e.target.value;localStorage.setItem("farmerp-language",state.language);}}content.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>action(b.dataset.action));}
+  function action(a){if(a==="new-record"){openRecordDialog();return;}if(a==="quick-task"){go("tasks");openRecordDialog();return;}if(a==="export"){alert("Exports will be generated from the connected data service.");}}
+  function openRecordDialog(){const key=state.view==="dashboard"?"tasks":state.view;const entity=({farms:"farms",masters:"crops",tasks:"tasks",inventory:"inventory",sales:"orders",finance:"expenses",harvest:"harvest",irrigation:"irrigation",crops:"cycles",scouting:"observations",assets:"assets",calendar:"events"})[key]||key;const fields=schemas[entity]||["Name","Code","Date","Status"];const dialog=document.createElement("dialog");dialog.className="record-dialog";dialog.innerHTML='<form method="dialog" id="record-form"><div class="dialog-head"><div><p class="eyebrow">NEW RECORD</p><h2>Create '+escape(key.replace(/s$/,""))+'</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><div class="form-grid">'+fields.map((f,i)=>'<label>'+escape(f)+(f.toLowerCase().includes("status")?'<select name="f'+i+'"><option>Active</option><option>Inactive</option></select>':f.toLowerCase().includes("date")?'<input type="date" name="f'+i+'">': '<input name="f'+i+'" placeholder="Enter '+escape(f.toLowerCase())+'">')+'</label>').join("")+'</div><div class="dialog-actions"><button class="button secondary" value="cancel">Cancel</button><button class="button primary" id="save-record" value="save">Save record</button></div></form>';document.body.append(dialog);dialog.showModal();$("#record-form").onsubmit=e=>{e.preventDefault();dialog.close();};dialog.addEventListener("close",()=>dialog.remove());}
+  function start(){const shellEl=document.querySelector(".sidebar");if(shellEl)shell();const main=document.querySelector(".main");if(main){main.innerHTML=header()+'<section id="app-content" class="content"></section><footer class="footer">FarmERP · Configurable farm management platform</footer>';}content=$("#app-content");render();const lang=$("#language");if(lang){lang.value=state.language;lang.onchange=e=>{state.language=e.target.value;localStorage.setItem("farmerp-language",state.language);};}}
+  start();
 })();
