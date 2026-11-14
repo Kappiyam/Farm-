@@ -27,10 +27,10 @@ if (names.length < 50) throw new Error(`Expected at least 50 standard domain tab
 for (const required of ["Farms","Sites","Fields","Plots","CropCycles","Tasks","TaskExecution","InventoryTransactions","HarvestSessions","ProduceLots","SalesOrders","Invoices","Payments","FinanceEntries","Assets","CalendarEvents","AuditLog"]) {
   if (!names.includes(required)) throw new Error(`Required standard table missing: ${required}`);
 }
-const uiTables = [...html.matchAll(/\["[^"]+","([A-Za-z][A-Za-z0-9]+)"\]/g)].map(m => m[1]);
+const tableGroupsBlock = html.match(/const tableGroups\s*=\s*\{([\s\S]*?)\n \};/);
+if (!tableGroupsBlock) throw new Error("Module table configuration not found in backend/App.html");
+const uiTables = [...tableGroupsBlock[1].matchAll(/\["[^"]+","([A-Z][A-Za-z0-9]+)"\]/g)].map(m => m[1]);
 for (const table of new Set(uiTables)) {
-  if (!names.includes(table) && !["Organizations","FarmMemberships","OrganizationUsers"].includes(table)) {
-    throw new Error(`UI refers to undefined table: ${table}`);
-  }
+  if (!names.includes(table)) throw new Error(`UI refers to undefined table: ${table}`);
 }
 console.log(`FarmERP validation passed: ${gsFiles.length} Apps Script files parsed; ${scripts.length} UI script parsed; ${names.length} domain tables declared.`);
