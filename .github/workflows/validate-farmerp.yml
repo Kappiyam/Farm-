@@ -1,0 +1,26 @@
+name: Validate FarmERP source
+
+on:
+  push:
+    branches:
+      - foundation/bootstrap
+  pull_request:
+    branches:
+      - foundation/bootstrap
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Parse frontend and combined Apps Script project
+        run: node scripts/validate-farmerp.mjs
