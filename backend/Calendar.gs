@@ -246,12 +246,13 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
     if(occurrence<erpCalDate_(event.start_at))throw new Error("Selected occurrence is before the series start.");
     const previousEnd=erpCalAddDays_(occurrence,-1);
     erpUpdateCalendarEventRow_(eventId,{recurrence_end:erpCalDateOnly_(previousEnd)}, "Series split before future edit");
-    const newStart=erpCalWithDate_(event.start_at,occurrence);
-    const duration=event.end_at?erpCalDate_(event.end_at).getTime()-erpCalDate_(event.start_at).getTime():0;
+    const newStart=changes.start_at?erpCalWithDate_(changes.start_at,occurrence):erpCalWithDate_(event.start_at,occurrence);
+    const originalDuration=event.end_at?erpCalDate_(event.end_at).getTime()-erpCalDate_(event.start_at).getTime():0;
+    const newEnd=changes.end_at?erpCalWithDate_(changes.end_at,occurrence):(originalDuration?new Date(newStart.getTime()+originalDuration):"");
     const continuation=Object.assign({},event,changes,{
       event_id:undefined,
       start_at:newStart,
-      end_at:duration?new Date(newStart.getTime()+duration):(changes.end_at||""),
+      end_at:newEnd,
       recurrence_end:changes.recurrence_end||event.recurrence_end||"",
       series_id:event.series_id||event.event_id,
       created_by:erpActor_()
