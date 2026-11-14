@@ -514,28 +514,29 @@ function erpPostLedger(table,record,idempotencyKey){
     if(!keys)throw new Error("Idempotency schema is not installed.");
     const keyHeaders=keys.getRange(1,1,1,keys.getLastColumn()).getDisplayValues()[0];
     const keyCol=keyHeaders.indexOf("idempotency_key")+1;
+    if(!keyCol)throw new Error("Idempotency key column is missing.");
     const keyValues=keys.getLastRow()>=2?keys.getRange(2,keyCol,keys.getLastRow()-1,1).getDisplayValues().flat():[];
     let keyRow=keyValues.indexOf(String(idempotencyKey));
     const payloadHash=Utilities.base64Encode(Utilities.computeDigest(
       Utilities.DigestAlgorithm.SHA_256,JSON.stringify(record),Utilities.Charset.UTF_8));
+    let reservedId="";
     if(keyRow>=0){
       keyRow+=2;
+      const operation=keyHeaders.indexOf("operation_type")>=0
+        ?String(keys.getRange(keyRow,keyHeaders.indexOf("operation_type")+1).getDisplayValue()):"";
+      if(operation!==table)throw new Error("This idempotency key was already used for another operation.");
       const existingHash=keyHeaders.indexOf("payload_hash")>=0
         ?String(keys.getRange(keyRow,keyHeaders.indexOf("payload_hash")+1).getDisplayValue()||""):"";
-      if(existingHash&&existingHash!==payloadHash)throw new Error("This idempotency key was already used for a different transaction.");
+      if(existingHash&&existingHash!==payloadHash)
+        throw new Error("This idempotency key was already used for a different transaction.");
+      reservedId=keyHeaders.indexOf("result_id")>=0
+        ?String(keys.getRange(keyRow,keyHeaders.indexOf("result_id")+1).getDisplayValue()||""):"";
       const existingLedger=erpLedgerIdempotencyRecord_(table,idempotencyKey);
       if(existingLedger){
         erpSetIdempotencyStatus_(keys,keyRow,{result_id:existingLedger.id,status:"complete",updated_at:new Date()});
         if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(record.produce_lot_id);
         return {ok:true,duplicate:true,id:existingLedger.id};
       }
-    }else{
-      const now=new Date(),keyRecord={
-        idempotency_key:idempotencyKey,operation_type:table,result_id:"",
-        status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now
-      };
-      keys.appendRow(keyHeaders.map(h=>Object.prototype.hasOwnProperty.call(keyRecord,h)?keyRecord[h]:""));
-      keyRow=keys.getLastRow();
     }
     const sh=ss.getSheetByName(table);
     if(!sh)throw new Error("Ledger table is not installed: "+table);
@@ -543,13 +544,14 @@ function erpPostLedger(table,record,idempotencyKey){
     if(headers.indexOf("idempotency_key")<0)throw new Error("Ledger table is missing idempotency_key: "+table);
     const unknown=Object.keys(record).filter(k=>headers.indexOf(k)<0);
     if(unknown.length)throw new Error("Unknown ledger fields: "+unknown.join(", "));
-    const now=new Date(),id=Utilities.getUuid(),data=Object.assign({},record);
+    const now=new Date(),data=Object.assign({},record);
     const idField=ERP_KEYS[table]||({
       InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",
       WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",
       TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id",
       ProduceLotMovements:"produce_lot_movement_id"
     })[table];
+    const id=reservedId||Utilities.getUuid();
     data[idField]=id;data.idempotency_key=idempotencyKey;
     if(!data.created_at)data.created_at=now;
     if(headers.indexOf("recorded_by")>=0&&!data.recorded_by)data.recorded_by=erpActor_();
@@ -567,9 +569,15 @@ function erpPostLedger(table,record,idempotencyKey){
       const available=erpProduceLotBalance_(data.produce_lot_id);
       if(available<Number(data.quantity))throw new Error("Insufficient available produce. Available: "+available);
     }
+    if(!keyRow){
+      const reservation={idempotency_key:idempotencyKey,operation_type:table,result_id:id,
+        status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now};
+      keys.appendRow(keyHeaders.map(h=>Object.prototype.hasOwnProperty.call(reservation,h)?reservation[h]:""));
+      keyRow=keys.getLastRow();
+    }
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
-    erpSetIdempotencyStatus_(keys,keyRow,{result_id:id,status:"complete",updated_at:new Date()});
     erpAudit_(table,id,"post",{},data);
+    erpSetIdempotencyStatus_(keys,keyRow,{result_id:id,status:"complete",updated_at:new Date()});
     if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);
     return {ok:true,duplicate:false,id:id};
   });
