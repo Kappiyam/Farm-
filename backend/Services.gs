@@ -561,7 +561,7 @@ function erpPostLedger(table,record,idempotencyKey){
     const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
     if(missing.length)throw new Error("Required fields: "+missing.join(", "));
     erpValidateRelations_(data,table);
-    if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))
+    if(data.quantity!==undefined&&data.quantity!==null&&String(data.quantity).trim()!==""&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))
       throw new Error("Quantity must be greater than zero.");
     if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
       const available=erpStockBalance(data.item_id,data.lot_id,data.farm_id,data.from_location||"");
