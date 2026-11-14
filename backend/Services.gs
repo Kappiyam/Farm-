@@ -361,7 +361,7 @@ function erpValidateRecord_(table,record,id){
 }
 
 /** Generic master/planning record create/update. Posted ledgers use dedicated services. */
-function erpSave(table,record){
+function erpSave(table,record,idempotencyKey){
   if(ERP_READ_ONLY_TABLES.has(table))throw new Error("This system table is read-only.");
   if(!ERP_KEYS[table])throw new Error("This record type is not editable through the generic service.");
   if(!record||typeof record!=="object"||Array.isArray(record))throw new Error("Record data is required.");
@@ -371,16 +371,54 @@ function erpSave(table,record){
     const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
     const key=ERP_KEYS[table],allowed=new Set(headers);
     Object.keys(record).forEach(k=>{if(!allowed.has(k))throw new Error("Unknown field "+k+" for "+table);});
-    const id=String(record[key]||Utilities.getUuid());
     const keyCol=headers.indexOf(key)+1;
-    if(!keyCol)throw new Error("Primary key is missing: "+key);
+    if(!keyCol)throw new Error("Primary key column is missing: "+key);
+    const keys=ss.getSheetByName("IdempotencyKeys");
+    let id=String(record[key]||""),idemRow=0,payloadHash="";
+    if(idempotencyKey){
+      if(!keys)throw new Error("Idempotency schema is not installed.");
+      const kh=keys.getRange(1,1,1,keys.getLastColumn()).getDisplayValues()[0];
+      const idemCol=kh.indexOf("idempotency_key")+1;
+      if(!idemCol)throw new Error("Idempotency key column is missing.");
+      payloadHash=Utilities.base64Encode(Utilities.computeDigest(
+        Utilities.DigestAlgorithm.SHA_256,table+"|"+JSON.stringify(record),Utilities.Charset.UTF_8));
+      const values=keys.getLastRow()>=2?keys.getRange(2,idemCol,keys.getLastRow()-1,1).getDisplayValues().flat():[];
+      const offset=values.indexOf(String(idempotencyKey));
+      if(offset>=0){
+        idemRow=offset+2;
+        const operation=kh.indexOf("operation_type")>=0?String(keys.getRange(idemRow,kh.indexOf("operation_type")+1).getDisplayValue()):"";
+        const oldHash=kh.indexOf("payload_hash")>=0?String(keys.getRange(idemRow,kh.indexOf("payload_hash")+1).getDisplayValue()):"";
+        if(operation!=="save:"+table)throw new Error("This idempotency key was already used for another operation.");
+        if(oldHash&&oldHash!==payloadHash)throw new Error("This idempotency key was reused with different record data.");
+        const resultId=kh.indexOf("result_id")>=0?String(keys.getRange(idemRow,kh.indexOf("result_id")+1).getDisplayValue()):"";
+        const status=kh.indexOf("status")>=0?String(keys.getRange(idemRow,kh.indexOf("status")+1).getDisplayValue()):"";
+        id=id||resultId;
+        if(status==="complete"&&resultId){
+          const last=sh.getLastRow(),ids=last>=2?sh.getRange(2,keyCol,last-1,1).getDisplayValues().flat():[];
+          const rowIndex=ids.indexOf(resultId);
+          if(rowIndex>=0){
+            const row=sh.getRange(rowIndex+2,1,1,headers.length).getValues()[0];
+            return {ok:true,table:table,id:resultId,created:false,duplicate:true,record:erpObject_(headers,row)};
+          }
+        }
+      }else{
+        id=id||Utilities.getUuid();
+        const now=new Date(),reservation={
+          idempotency_key:idempotencyKey,operation_type:"save:"+table,result_id:id,
+          status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now
+        };
+        keys.appendRow(kh.map(h=>Object.prototype.hasOwnProperty.call(reservation,h)?reservation[h]:""));
+        idemRow=keys.getLastRow();
+      }
+    }
+    id=id||Utilities.getUuid();
     const last=sh.getLastRow();let rowNum=0;
-    if(last>=2){const ids=sh.getRange(2,keyCol,last-1,1).getDisplayValues().flat();const i=ids.indexOf(id);if(i>=0)rowNum=i+2;}
+    if(last>=2){const ids=sh.getRange(2,keyCol,last-1,1).getDisplayValues().flat();const index=ids.indexOf(id);if(index>=0)rowNum=index+2;}
     const isUpdate=!!rowNum;
     if(table==="CalendarEvents"&&isUpdate)throw new Error("Edit calendar occurrences or series through the calendar editor so historical instances are preserved.");
     const old=isUpdate?sh.getRange(rowNum,1,1,headers.length).getValues()[0]:new Array(headers.length).fill("");
-    const before=erpObject_(headers,old);
-    const merged=Object.assign({},before,record);
+    const before=erpObject_(headers,old),merged=Object.assign({},before,record);
+    merged[key]=id;
     if(table==="Tasks"&&isUpdate&&Object.prototype.hasOwnProperty.call(record,"status")&&String(record.status)!==String(before.status))
       throw new Error("Task status must be changed through the task workflow so the transition history is retained.");
     (ERP_CALCULATED_FIELDS[table]||[]).forEach(field=>{
@@ -392,18 +430,21 @@ function erpSave(table,record){
     });
     erpValidateRecord_(table,merged,id);
     const now=new Date();
-    const values=headers.map((h,i)=>{
+    const values=headers.map((h,index)=>{
+      if(h===key)return id;
       if(Object.prototype.hasOwnProperty.call(record,h))return erpCoerce_(record[h]);
-      if(!isUpdate&&h===key)return id;
       if(!isUpdate&&h==="created_at")return now;
       if(h==="updated_at")return now;
-      return old[i];
+      return old[index];
     });
     if(isUpdate)sh.getRange(rowNum,1,1,headers.length).setValues([values]);
     else sh.appendRow(values);
-    erpAudit_(table,id,isUpdate?"update":"create",before,record);
+    erpAudit_(table,id,isUpdate?"update":"create",before,Object.assign({},record,{[key]:id}));
     try{CacheService.getScriptCache().remove("ERP:"+table+":"+id);}catch(e){}
-    return {ok:true,table:table,id:id,created:!isUpdate,record:erpObject_(headers,values)};
+    if(idempotencyKey&&idemRow){
+      erpSetIdempotencyStatus_(keys,idemRow,{result_id:id,status:"complete",updated_at:new Date()});
+    }
+    return {ok:true,table:table,id:id,created:!isUpdate,duplicate:false,record:erpObject_(headers,values)};
   });
 }
 
