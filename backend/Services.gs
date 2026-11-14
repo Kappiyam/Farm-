@@ -106,7 +106,20 @@ const ERP_KEYS = Object.freeze({
   SavedViews:"saved_view_id"
 });
 
-const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Fulfilments:["sales_order_id","fulfilment_date","fulfilment_reference"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  ProduceLotMovements:["produce_lot_id","movement_type","quantity","unit","occurred_at"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
+const ERP_LEDGER_REQUIRED = Object.freeze({
+  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],
+  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],
+  Fulfilments:["sales_order_id","fulfilment_date","fulfilment_reference"],
+  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],
+  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],
+  TaskExecution:["task_id","person_id","started_at"],
+  HarvestLines:["harvest_id","crop_id","quantity","unit"],
+  ProduceLotMovements:["produce_lot_id","movement_type","quantity","unit","occurred_at"],
+  Attendance:["farm_id","person_id","work_date","attendance_status"],
+  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]
+});
+
+const ERP_REQUIRED = Object.freeze({
   Organizations:["organization_name","organization_code"],Users:["display_name","email"],
   Roles:["role_name"],UserRoles:["user_id","role_id"],Teams:["farm_id","team_name"],
   TeamMembers:["team_id","person_id"],OrganizationUsers:["organization_id","user_id"],
