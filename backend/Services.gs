@@ -28,7 +28,7 @@ const ERP_TABLES = Object.freeze({
   CropProfiles: ["crop_profile_id","crop_id","variety_id","production_system","propagation_method","nursery_days","duration_days","germination_rate","survival_rate","expected_yield","yield_unit","harvest_profile_json","resource_rates_json","assumption_basis","status","created_at","updated_at"],
   PlantingCampaigns: ["campaign_id","farm_id","campaign_name","start_date","end_date","status","notes","created_by","created_at","updated_at"],
   PlantingPlans: ["planting_plan_id","campaign_id","farm_id","field_id","plot_id","crop_id","variety_id","planned_area","area_unit","target_planting_date","target_harvest_date","planned_plant_count","planned_seed_quantity","seed_unit","status","created_at","updated_at"],
-  CropCycles: ["crop_cycle_id","farm_id","field_id","plot_id","crop_id","variety_id","campaign_id","cycle_name","production_system","propagation_method","nursery_date","sowing_date","transplant_date","start_date","expected_end_date","actual_end_date","area_value","area_unit","plant_count","crop_stage","stage_observed_at","status","parent_cycle_id","notes","created_by","created_at","updated_at"],
+  CropCycles: ["crop_cycle_id","farm_id","field_id","plot_id","crop_id","variety_id","campaign_id","cycle_name","production_system","propagation_method","nursery_date","sowing_date","transplant_date","start_date","expected_end_date","actual_end_date","area_value","area_unit","plant_count","crop_stage","forecast_stage","observed_stage","stage_observed_at","forecast_yield","yield_unit","forecast_basis","forecast_confidence","status","parent_cycle_id","notes","created_by","created_at","updated_at"],
   CropCycleEvents: ["cycle_event_id","crop_cycle_id","event_type","event_date","stage","quantity","unit","description","recorded_by","created_at"],
   TaskTemplates: ["template_id","farm_id","crop_id","variety_id","template_name","task_type","trigger_type","trigger_offset_days","recurrence_rule","default_duration_minutes","default_priority","checklist_json","status","created_at","updated_at"],
   Tasks: ["task_id","farm_id","site_id","field_id","plot_id","crop_cycle_id","template_id","event_id","title","description","task_type","priority","status","planned_start","due_at","estimated_duration_minutes","assigned_team","created_by","created_at","updated_at"],
@@ -254,12 +254,7 @@ function erpRead_(table,options){
 
 function erpValue_(v){return v instanceof Date?v.toISOString():v;}
 
-function erpValidateRecord_(table,record,id){
-  (ERP_REQUIRED[table]||[]).forEach(field=>{
-    if(record[field]===undefined||record[field]===null||String(record[field]).trim()===""){
-      throw new Error("Required field: "+field);
-    }
-  });
+function erpValidateRelations_(record){
   Object.keys(ERP_RELATIONS).forEach(field=>{
     const value=record[field];
     if(value===undefined||value===null||String(value)==="")return;
@@ -268,6 +263,15 @@ function erpValidateRecord_(table,record,id){
     const matches=erpRead_(target,{limit:1000,filter:{[targetKey]:String(value)}}).rows;
     if(!matches.length)throw new Error("Referenced "+field+" record was not found.");
   });
+}
+
+function erpValidateRecord_(table,record,id){
+  (ERP_REQUIRED[table]||[]).forEach(field=>{
+    if(record[field]===undefined||record[field]===null||String(record[field]).trim()===""){
+      throw new Error("Required field: "+field);
+    }
+  });
+  erpValidateRelations_(record);
   const unique=ERP_UNIQUE_FIELDS[table]||[];
   if(unique.length&&unique.every(f=>record[f]!==undefined&&record[f]!==null&&String(record[f]).trim()!=="")){
     const current=ERP_KEYS[table];
