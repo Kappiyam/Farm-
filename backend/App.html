@@ -168,50 +168,64 @@
   const cols=displayColumns(state.table),key=state.schema.keys[state.table];
   $("#record-count").textContent=state.total+" records";
   $("#page-info").textContent=state.total?("Showing "+(state.offset+1)+"–"+Math.min(state.offset+state.rows.length,state.total)+" of "+state.total):"0 records";
-  $("#prev-page").disabled=state.offset===0;$("#next-page").disabled=state.offset+state.limit>=state.total;
-  if(!state.rows.length){const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';$("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;}
-  const canEdit=!!key&&!ledgerTables.has(state.table),canArchive=(state.schema.archivable||[]).includes(state.table);
-  const actionsHead=(canEdit||canArchive)?'<th>Actions</th>':'';
-  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+actionsHead+'</tr></thead><tbody>'+state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+((canEdit||canArchive)?'<td><div class="row-actions">'+(canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+(canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+'</div></td>':"")+'</tr>').join("")+'</tbody></table>';
-  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key]||"Record")+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+'</dl>'+((canEdit||canArchive)?'<div class="record-card-actions">'+(canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+(canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+'</div>':"")+'</article>').join("");
+  $("#prev-page").disabled=state.offset===0;$("#next-page").disabled=state.offset+state.rows.length>=state.total;
+  if(!state.rows.length){
+    const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';
+    $("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;
+  }
+  const canEdit=!!key&&!ledgerTables.has(state.table);
+  const canArchive=(state.schema.archivable||[]).includes(state.table);
+  const canPlan=state.table==="CropCycles",canFollow=state.table==="Observations";
+  const hasActions=canEdit||canArchive||canPlan||canFollow;
+  const actionHeader=hasActions?"<th>Actions</th>":"";
+  function actionHtml(r){
+    return hasActions?'<td><div class="row-actions">'+
+      (canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+
+      (canPlan?'<button class="mini-btn" data-plan-cycle="'+esc(r[key])+'">Plan tasks</button>':"")+
+      (canFollow?'<button class="mini-btn" data-follow-up="'+esc(r[key])+'">Create task</button>':"")+
+      (canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+
+      '</div></td>':"";
+  }
+  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+actionHeader+'</tr></thead><tbody>'+
+    state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+actionHtml(r)+'</tr>').join("")+
+    '</tbody></table>';
+  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key]||"Record")+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+
+    cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+
+    '</dl>'+(hasActions?'<div class="record-card-actions">'+
+      (canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+
+      (canPlan?'<button class="mini-btn" data-plan-cycle="'+esc(r[key])+'">Plan tasks</button>':"")+
+      (canFollow?'<button class="mini-btn" data-follow-up="'+esc(r[key])+'">Create task</button>':"")+
+      (canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+
+      '</div>':"")+'</article>').join("");
   $("#content").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openRecord(state.table,state.rows.find(r=>String(r[key])===b.dataset.edit)));
   $("#content").querySelectorAll("[data-archive]").forEach(b=>b.onclick=()=>archiveRecord(b.dataset.archive));
+  $("#content").querySelectorAll("[data-plan-cycle]").forEach(b=>b.onclick=()=>previewTaskPlan(b.dataset.planCycle));
+  $("#content").querySelectorAll("[data-follow-up]").forEach(b=>b.onclick=()=>openObservationFollowUp(b.dataset.followUp));
  }
- function renderReportsModule(){
-  const m=title("reports");
-  $("#page-title").textContent=m.label;
-  $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / MANAGEMENT</div><h2>Reports & analytics</h2><p>Operational reporting is derived from recorded source transactions. Forecasts, actuals and cost allocations are not silently combined.</p></div><span class="symbol">▥</span></section><article class="panel"><div class="panel-head"><div><h3>Report builder</h3><p>Select a standard report and reporting period.</p></div><span class="tag">Standard reports</span></div><div class="form-grid"><div class="field"><label>Report</label><select id="report-type"><option value="production">Production summary</option><option value="tasks">Task performance</option><option value="workforce">Workforce & attendance</option><option value="inventory">Inventory & valuation</option><option value="harvest">Harvest & traceability</option><option value="sales">Sales & collections</option><option value="finance">Finance & cost allocation</option><option value="assets">Assets & maintenance</option><option value="crop-profitability">Crop-cycle profitability</option></select></div><div class="field"><label>Period start</label><input type="date" id="report-start"></div><div class="field"><label>Period end</label><input type="date" id="report-end"></div></div><div class="actions" style="margin-top:14px"><button class="btn primary" id="generate-report">Generate report</button></div></article><section id="report-output"></section>';
-  const end=new Date(),start=new Date();start.setDate(end.getDate()-30);
-  $("#report-start").value=start.toISOString().slice(0,10);$("#report-end").value=end.toISOString().slice(0,10);
-  $("#generate-report").onclick=runReport;
- }
- async function runReport(){
-  const button=$("#generate-report");button.disabled=true;button.textContent="Generating…";
+ async function previewTaskPlan(cycleId){
   try{
-   const result=await call("erpReport",$("#report-type").value,{farmId:state.farmId,startDate:$("#report-start").value,endDate:$("#report-end").value});
-   state.reportData=result;
-   const metrics=Object.entries(result.summary||{}).map(([k,v])=>'<div class="metric"><div class="metric-top">'+esc(labelField(k))+'</div><strong>'+esc(v)+'</strong></div>').join("");
-   const rows=result.rows||[],cols=rows.length?Object.keys(rows[0]):[];
-   $("#report-output").innerHTML='<div class="metric-grid" style="margin-top:15px">'+metrics+'</div><article class="panel" style="margin-top:14px"><div class="panel-head"><div><h3>Report detail</h3><p>'+esc(result.period.start)+' to '+esc(result.period.end)+'</p></div><button class="btn secondary" id="report-csv">↓ Export CSV</button></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(r[c])+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>':'<div class="empty"><strong>No matching data</strong><span>Change the reporting period or record more operational data.</span></div>')+'<div class="notice">'+esc(result.methodology)+'</div></article>';
-   $("#report-csv").onclick=exportReportCsv;
-  }catch(e){$("#report-output").innerHTML='<div class="error">'+esc(e.message)+'</div>';}
-  finally{button.disabled=false;button.textContent="Generate report";}
+   const result=await call("erpPreviewCropTasks",cycleId);
+   const dialog=document.createElement("dialog");
+   dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><p>PLANNING PREVIEW</p><h2>Crop task series</h2><p>'+esc(result.cycleName)+' · '+result.plannedCount+' planned tasks · '+result.existingCount+' already exist</p></div><button class="icon-btn" id="close-plan">×</button></div><div class="table-wrap"><table><thead><tr><th>Task</th><th>Planned date</th><th>Priority</th><th>Existing</th></tr></thead><tbody>'+
+    result.tasks.map(t=>'<tr><td>'+esc(t.title)+'</td><td>'+esc(t.due_at)+'</td><td>'+esc(t.priority)+'</td><td>'+(t.already_exists?"Yes":"No")+'</td></tr>').join("")+
+    '</tbody></table></div><div class="notice">'+esc(result.notice)+'</div><div class="dialog-actions"><button class="btn secondary" id="cancel-plan">Close</button><button class="btn primary" id="create-plan" '+(result.plannedCount===result.existingCount?"disabled":"")+'>Generate planned tasks</button></div></div>';
+   document.body.append(dialog);dialog.showModal();const close=()=>dialog.close();
+   $("#close-plan",dialog).onclick=close;$("#cancel-plan",dialog).onclick=close;dialog.addEventListener("close",()=>dialog.remove());
+   $("#create-plan",dialog).onclick=async()=>{const b=$("#create-plan",dialog);b.disabled=true;b.textContent="Generating…";
+    try{const done=await call("erpGenerateCropTasks",cycleId);toast(done.createdCount+" planned tasks generated; "+done.skippedCount+" duplicates skipped.");close();fetchRows();}
+    catch(e){toast(e.message,true);b.disabled=false;b.textContent="Generate planned tasks";}
+   };
+  }catch(e){toast(e.message,true);}
  }
- function exportReportCsv(){
-  if(!state.reportData)return;
-  const rows=state.reportData.rows||[],cols=rows.length?Object.keys(rows[0]):[];
-  const csv=[cols].concat(rows.map(r=>cols.map(c=>r[c]??""))).map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n");
-  const url=URL.createObjectURL(new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"}));
-  const a=document.createElement("a");a.href=url;a.download="FarmERP-"+state.reportData.report+".csv";a.click();URL.revokeObjectURL(url);
- }
- async function runDemandPlanner(){
-  const button=$("#run-demand");button.disabled=true;button.textContent="Calculating…";
-  try{
-   const r=await call("erpCalculateProductionGap",state.farmId,$("#demand-start").value,$("#demand-end").value);
-   const rows=r.rows||[],cols=["crop_name","unit","confirmed_demand","forecast_demand","available_stock","projected_crop_supply","gap_confirmed","gap_including_forecast","confidence"];
-   $("#demand-results").innerHTML=rows.length?'<div class="table-wrap" style="margin-top:14px"><table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+cols.map(c=>'<td>'+esc(row[c])+'</td>').join("")+'</tr>').join("")+'</tbody></table></div><div class="notice">'+esc(r.methodology)+' '+esc(r.limitations.join(" "))+'</div>':'<div class="empty"><strong>No demand or supply records for this period</strong><span>Enter confirmed demand, forecast demand, crop cycles and available produce lots to calculate requirements.</span></div>';
-  }catch(e){$("#demand-results").innerHTML='<div class="error">'+esc(e.message)+'</div>';}
-  finally{button.disabled=false;button.textContent="Calculate production gap";}
+ async function openObservationFollowUp(observationId){
+  const dialog=document.createElement("dialog");
+  dialog.innerHTML='<form class="dialog-body" id="follow-form"><div class="dialog-head"><div><p>SCOUTING / FOLLOW-UP</p><h2>Create an operational task</h2><p>The observation remains a separate source record.</p></div><button type="button" class="icon-btn" id="follow-close">×</button></div><div class="form-grid"><div class="field full"><label>Task title *</label><input name="title" required></div><div class="field"><label>Due date</label><input type="date" name="due"></div><div class="field"><label>Priority</label><select name="priority"><option>normal</option><option>high</option><option>urgent</option><option>low</option></select></div></div><div class="dialog-actions"><button class="btn secondary" type="button" id="follow-cancel">Cancel</button><button class="btn primary">Create task</button></div></form>';
+  document.body.append(dialog);dialog.showModal();const close=()=>dialog.close();
+  $("#follow-close",dialog).onclick=close;$("#follow-cancel",dialog).onclick=close;dialog.addEventListener("close",()=>dialog.remove());
+  $("#follow-form",dialog).onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);
+   try{await call("erpCreateTaskFromObservation",observationId,f.get("title"),f.get("due"),f.get("priority"));close();toast("Follow-up task created.");fetchRows();}
+   catch(err){toast(err.message,true);}
+  };
  }
  const fieldTables=new Set(["Organizations","Users","Roles","UserRoles","Teams","TeamMembers","Sites","Fields","Plots","Beds","Infrastructure","Units","Crops","Varieties","CropProfiles","PlantingCampaigns","PlantingPlans","CropCycles","CropCycleEvents","TaskTemplates","Tasks","TaskAssignments","People","Suppliers","InventoryItems","ProcurementOrders","ProcurementLines","StockLots","FarmMadeBatches","FarmMadeBatchInputs","HarvestSessions","ProduceLots","PackhouseOperations","Customers","Products","PriceLists","PriceListLines","SalesOrders","SalesOrderLines","Fulfilments","FulfilmentLines","Dispatches","Invoices","SalesReturns","SalesReturnLines","PaymentAccounts","CostAllocations","Assets","AssetUsage","Maintenance","CalendarEvents","EventParticipants","ActivityJournal","Attachments","DemandRecords","ForecastVersions","SavedViews"]);
  function inferType(h){
