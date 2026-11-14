@@ -85,7 +85,7 @@
   settings:[["Organisation","Organizations"],["Users","Users"],["Roles","Roles"],["User roles","UserRoles"],["Farm memberships","FarmMemberships"],["Organisation users","OrganizationUsers"],["Teams","Teams"],["Team members","TeamMembers"],["Farm settings","FarmSettings"],["Notifications","Notifications"],["Saved views","SavedViews"],["Audit log","AuditLog"],["Idempotency keys","IdempotencyKeys"]]
  };
  const ledgerTables=new Set(["InventoryTransactions","FinanceEntries","Payments","WageTransactions","TaskExecution","HarvestLines","Attendance","IrrigationOperations"]);
- const workflowManagedTables=new Set(["HarvestLines","ProduceLotMovements","FulfilmentLines","InvoiceLines","IdempotencyKeys","AuditLog"]);
+ const workflowManagedTables=new Set(["HarvestLines","ProduceLotMovements","FulfilmentLines","InvoiceLines","Payments","IdempotencyKeys","AuditLog"]);
  const hiddenCalculatedFields={ProcurementLines:["quantity_received"],SalesOrderLines:["quantity_fulfilled"],StockLots:["quantity_available"],ProduceLots:["quantity_available"]};
  const labelMap={"farm_id":"Farm","organization_id":"Organisation","site_id":"Site","field_id":"Field","plot_id":"Plot","bed_id":"Bed","crop_id":"Crop","variety_id":"Variety","crop_cycle_id":"Crop cycle","person_id":"Person","user_id":"User","role_id":"Role","team_id":"Team","task_id":"Task","template_id":"Task template","event_id":"Calendar event","item_id":"Inventory item","product_id":"Product","lot_id":"Stock lot","supplier_id":"Supplier","customer_id":"Customer","sales_order_id":"Sales order","invoice_id":"Invoice","asset_id":"Asset","account_id":"Payment account","produce_lot_id":"Produce lot","finance_entry_id":"Finance entry","parent_cycle_id":"Parent crop cycle","campaign_id":"Planting campaign","price_list_id":"Price list","fulfilment_id":"Fulfilment","harvest_id":"Harvest session","from_location":"Source location","to_location":"Destination location"};
  const lookupMap={organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",source_plot_id:"Plots",bed_id:"Beds",crop_id:"Crops",variety_id:"Varieties",crop_cycle_id:"CropCycles",source_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",person_id:"People",observer_id:"People",custodian_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",team_leader_id:"People",template_id:"TaskTemplates",event_id:"CalendarEvents",item_id:"InventoryItems",product_item_id:"InventoryItems",product_id:"Products",lot_id:"StockLots",source_lot_id:"StockLots",supplier_id:"Suppliers",customer_id:"Customers",sales_order_id:"SalesOrders",invoice_id:"Invoices",asset_id:"Assets",account_id:"PaymentAccounts",produce_lot_id:"ProduceLots",finance_entry_id:"FinanceEntries",campaign_id:"PlantingCampaigns",price_list_id:"PriceLists",fulfilment_id:"Fulfilments",sales_line_id:"SalesOrderLines",procurement_id:"ProcurementOrders",batch_id:"FarmMadeBatches",irrigation_run_id:"IrrigationRuns",harvest_id:"HarvestSessions",team_id:"Teams"};
@@ -209,10 +209,10 @@
   $("#page-info").textContent=state.total?("Showing "+(state.offset+1)+"–"+Math.min(state.offset+state.rows.length,state.total)+" of "+state.total):"0 records";
   $("#prev-page").disabled=state.offset===0;$("#next-page").disabled=state.offset+state.rows.length>=state.total;
   if(!state.rows.length){const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';$("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;}
-  const canEdit=!!key&&!ledgerTables.has(state.table),canArchive=(state.schema.archivable||[]).includes(state.table);
+  const canEdit=!!key&&!ledgerTables.has(state.table)&&!workflowManagedTables.has(state.table),canArchive=(state.schema.archivable||[]).includes(state.table);
   const canPlan=state.table==="CropCycles",canFollow=state.table==="Observations";
-  const canReceive=state.table==="ProcurementOrders",canHarvest=state.table==="HarvestSessions",canFulfil=state.table==="SalesOrders";
-  const hasActions=canEdit||canArchive||canPlan||canFollow||canReceive||canHarvest||canFulfil;
+  const canReceive=state.table==="ProcurementOrders",canHarvest=state.table==="HarvestSessions",canFulfil=state.table==="SalesOrders",canPay=state.table==="Invoices";
+  const hasActions=canEdit||canArchive||canPlan||canFollow||canReceive||canHarvest||canFulfil||canPay;
   const actionHeader=hasActions?"<th>Actions</th>":"";
   function actionHtml(r){
     return hasActions?'<td><div class="row-actions">'+
