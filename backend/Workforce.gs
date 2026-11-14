@@ -98,7 +98,9 @@ function erpRecordTaskExecution(taskId,executions,batchReference){
     const result=erpPostLedger("TaskExecution",record,key);
     results.push({executionId:result.id,duplicate:!!result.duplicate,personId:personId});
   });
-  if(["ready","assigned","blocked"].includes(String(task.status||"").toLowerCase()))
+  const currentStatus=String(task.status||"planned").toLowerCase();
+  if(currentStatus==="planned")erpUpdateTaskStatus(taskId,"ready","Actual work started");
+  if(["planned","ready","assigned","blocked"].includes(currentStatus))
     erpUpdateTaskStatus(taskId,"in_progress","Actual work recorded");
   return {ok:true,taskId:taskId,recordedCount:results.length,results:results,
     note:"Execution records are measured actuals. Task completion status remains a separate review decision."};
