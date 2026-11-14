@@ -209,26 +209,54 @@ function erpNextInvoiceNumber_(){
 function erpCreateInvoiceFromOrder(orderId,dueDate){
   const order=erpGetRecord_("SalesOrders",orderId);
   const orderLines=erpRead_("SalesOrderLines",{limit:1000,filter:{sales_order_id:orderId}}).rows;
-  const invoiceLines=erpRead_("InvoiceLines",{limit:1000}).rows;
+  const invoices=erpRead_("Invoices",{limit:1000,filter:{sales_order_id:orderId}}).rows;
+  const issuedCount=invoices.filter(i=>["issued","paid","partially_paid"].includes(String(i.status||"").toLowerCase())).length;
+  const generationKey=String(orderId)+"|invoice-batch|"+String(issuedCount+1);
+  let invoice=erpFindOne_("Invoices",{generation_key:generationKey});
+  const allInvoiceLines=erpRead_("InvoiceLines",{limit:1000}).rows;
   const pending=[];
   orderLines.forEach(line=>{
-    const already=invoiceLines.filter(x=>String(x.sales_line_id)===String(line.sales_line_id))
+    const already=allInvoiceLines.filter(x=>String(x.sales_line_id)===String(line.sales_line_id))
       .reduce((sum,x)=>sum+(Number(x.quantity)||0),0);
     const qty=Math.max(0,(Number(line.quantity_fulfilled)||0)-already);
     if(qty>0)pending.push({line:line,quantity:qty,unitPrice:Number(line.unit_price)||0,
       amount:qty*(Number(line.unit_price)||0)});
   });
-  if(!pending.length)throw new Error("There are no newly fulfilled quantities available to invoice.");
-  const subtotal=pending.reduce((sum,x)=>sum+x.amount,0);
-  const invoice=erpSave("Invoices",{
-    farm_id:order.farm_id,customer_id:order.customer_id,sales_order_id:orderId,
-    invoice_number:erpNextInvoiceNumber_(),invoice_date:new Date(),due_date:dueDate||"",
-    status:"issued",currency_code:order.currency_code,subtotal:subtotal,tax_amount:0,total_amount:subtotal
+  if(!invoice&&!pending.length)throw new Error("There are no newly fulfilled quantities available to invoice.");
+  if(!invoice){
+    try{
+      invoice=erpSave("Invoices",{
+        farm_id:order.farm_id,customer_id:order.customer_id,sales_order_id:orderId,
+        invoice_number:erpNextInvoiceNumber_(),generation_key:generationKey,
+        invoice_date:new Date(),due_date:dueDate||"",status:"draft",
+        currency_code:order.currency_code,subtotal:0,tax_amount:0,total_amount:0
+      }).record;
+    }catch(error){
+      // A concurrent request may have created the same deterministic billing batch.
+      invoice=erpFindOne_("Invoices",{generation_key:generationKey});
+      if(!invoice)throw error;
+    }
+  }
+  const currentLines=erpRead_("InvoiceLines",{limit:1000,filter:{invoice_id:invoice.invoice_id}}).rows;
+  const inserted=[];
+  pending.forEach(x=>{
+    const existing=currentLines.find(l=>String(l.sales_line_id)===String(x.line.sales_line_id));
+    if(existing)return;
+    const saved=erpSave("InvoiceLines",{
+      invoice_id:invoice.invoice_id,sales_line_id:x.line.sales_line_id,product_id:x.line.product_id,
+      description:x.line.description||"",quantity:x.quantity,unit:x.line.unit,
+      unit_price:x.unitPrice,line_total:x.amount
+    });
+    inserted.push(saved.id);
+  });
+  // Reconcile the draft header from its actual line records; safe after a partial retry.
+  const finalLines=erpRead_("InvoiceLines",{limit:1000,filter:{invoice_id:invoice.invoice_id}}).rows;
+  const subtotal=finalLines.reduce((sum,line)=>sum+(Number(line.line_total)||0),0);
+  invoice=erpSave("Invoices",{
+    invoice_id:invoice.invoice_id,subtotal:subtotal,tax_amount:Number(invoice.tax_amount)||0,
+    total_amount:subtotal+(Number(invoice.tax_amount)||0),status:"issued",
+    due_date:dueDate||invoice.due_date||""
   }).record;
-  pending.forEach(x=>erpSave("InvoiceLines",{
-    invoice_id:invoice.invoice_id,sales_line_id:x.line.sales_line_id,product_id:x.line.product_id,
-    description:x.line.description||"",quantity:x.quantity,unit:x.line.unit,
-    unit_price:x.unitPrice,line_total:x.amount
-  }));
-  return {ok:true,invoice:invoice,lines:pending.length,total:subtotal,currency:order.currency_code};
+  return {ok:true,invoice:invoice,lines:inserted.length,total:invoice.total_amount,currency:order.currency_code,
+    resumedDraft:invoices.some(x=>x.invoice_id===invoice.invoice_id&&String(x.status).toLowerCase()==="draft")};
 }
