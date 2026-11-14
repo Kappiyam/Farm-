@@ -254,6 +254,37 @@ function erpRead_(table,options){
 
 function erpValue_(v){return v instanceof Date?v.toISOString():v;}
 
+function erpValidateRecord_(table,record,id){
+  (ERP_REQUIRED[table]||[]).forEach(field=>{
+    if(record[field]===undefined||record[field]===null||String(record[field]).trim()===""){
+      throw new Error("Required field: "+field);
+    }
+  });
+  Object.keys(ERP_RELATIONS).forEach(field=>{
+    const value=record[field];
+    if(value===undefined||value===null||String(value)==="")return;
+    const target=ERP_RELATIONS[field],targetKey=ERP_KEYS[target];
+    if(!targetKey)return;
+    const matches=erpRead_(target,{limit:1000,filter:{[targetKey]:String(value)}}).rows;
+    if(!matches.length)throw new Error("Referenced "+field+" record was not found.");
+  });
+  const unique=ERP_UNIQUE_FIELDS[table]||[];
+  if(unique.length&&unique.every(f=>record[f]!==undefined&&record[f]!==null&&String(record[f]).trim()!=="")){
+    const current=ERP_KEYS[table];
+    const existing=erpRead_(table,{limit:1000}).rows;
+    const duplicate=existing.find(r=>String(r[current])!==String(id)&&unique.every(f=>String(r[f]??"").trim().toLowerCase()===String(record[f]).trim().toLowerCase()));
+    if(duplicate)throw new Error("A record with the same "+unique.map(label=>label.replace(/_/g," ")).join(" + ")+" already exists.");
+  }
+  Object.keys(record).forEach(field=>{
+    const value=record[field];
+    if(value===""||value===null||value===undefined)return;
+    if(/quantity|amount|cost|price|rate|area|duration|minutes|hours|volume|percent|spacing|days|count|balance|threshold|factor|plant_count|survival|germination|discount|tax|subtotal|total|yield|meter|downtime|contribution|offset|interval|width|length|height/i.test(field)){
+      if(!isFinite(Number(value)))throw new Error(field+" must be numeric.");
+      if(/percent|rate|survival|germination|contribution/i.test(field)&&Number(value)<0)throw new Error(field+" cannot be negative.");
+    }
+  });
+}
+
 /** Generic master/planning record create/update. Posted ledgers use dedicated services. */
 function erpSave(table,record){
   if(!ERP_KEYS[table])throw new Error("This record type is not editable through the generic service.");
@@ -264,8 +295,6 @@ function erpSave(table,record){
     const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
     const key=ERP_KEYS[table],allowed=new Set(headers);
     Object.keys(record).forEach(k=>{if(!allowed.has(k))throw new Error("Unknown field "+k+" for "+table);});
-    const missing=(ERP_REQUIRED[table]||[]).filter(k=>record[k]===undefined||record[k]===null||String(record[k]).trim()==="");
-    if(missing.length)throw new Error("Required fields: "+missing.join(", "));
     const id=String(record[key]||Utilities.getUuid());
     const keyCol=headers.indexOf(key)+1;
     if(!keyCol)throw new Error("Primary key is missing: "+key);
@@ -273,7 +302,10 @@ function erpSave(table,record){
     if(last>=2){const ids=sh.getRange(2,keyCol,last-1,1).getDisplayValues().flat();const i=ids.indexOf(id);if(i>=0)rowNum=i+2;}
     const isUpdate=!!rowNum;
     const old=isUpdate?sh.getRange(rowNum,1,1,headers.length).getValues()[0]:new Array(headers.length).fill("");
-    const before=erpObject_(headers,old),now=new Date();
+    const before=erpObject_(headers,old);
+    const merged=Object.assign({},before,record);
+    erpValidateRecord_(table,merged,id);
+    const now=new Date();
     const values=headers.map((h,i)=>{
       if(Object.prototype.hasOwnProperty.call(record,h))return erpCoerce_(record[h]);
       if(!isUpdate&&h===key)return id;
