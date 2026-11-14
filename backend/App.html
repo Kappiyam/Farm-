@@ -235,6 +235,144 @@
    catch(err){toast(err.message,true);}
   };
  }
+ async function openProcurementReceipt(procurementId){
+  try{
+    const order=await call("erpList","ProcurementOrders",{limit:1000,filter:{procurement_id:procurementId}});
+    if(!order.rows.length)throw new Error("Procurement order not found.");
+    const lines=(await call("erpList","ProcurementLines",{limit:1000,filter:{procurement_id:procurementId}})).rows;
+    if(!lines.length)throw new Error("Add procurement lines before receiving stock.");
+    const items=await lookupOptions("InventoryItems");
+    const modal=document.createElement("dialog");
+    modal.innerHTML='<form class="dialog-body" id="receipt-form"><div class="dialog-head"><div><p>INVENTORY / GOODS RECEIPT</p><h2>Receive purchased stock</h2><p>Purchase orders do not increase stock. Confirm physical quantities and lot details here.</p></div><button type="button" class="icon-btn" id="receipt-close">×</button></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Outstanding</th><th>Receive now</th><th>Lot / batch</th><th>Unit cost</th><th>Expiry</th><th>Storage</th></tr></thead><tbody id="receipt-lines"></tbody></table></div><div class="dialog-actions"><button type="button" class="btn secondary" id="receipt-cancel">Cancel</button><button type="submit" class="btn primary" id="receipt-save">Confirm receipt</button></div></form>';
+    document.body.append(modal);modal.showModal();
+    const close=()=>modal.close();$("#receipt-close",modal).onclick=close;$("#receipt-cancel",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
+    const active=lines.filter(l=>(Number(l.quantity_ordered)||0)>(Number(l.quantity_received)||0)+0.000001);
+    $("#receipt-lines",modal).innerHTML=active.map((line,index)=>{
+      const item=items.find(x=>String(x.item_id)===String(line.item_id));
+      const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0));
+      return '<tr data-line="'+esc(line.procurement_line_id)+'"><td>'+esc(item?item.item_name:line.description||line.item_id)+'<br><small>'+esc(line.unit)+'</small></td><td>'+esc(outstanding)+'</td><td><input type="number" step="any" min="0" max="'+esc(outstanding)+'" data-receive-qty value="'+esc(outstanding)+'" style="width:90px"></td><td><input data-lot-code required placeholder="Lot code" style="width:110px"></td><td><input data-unit-cost type="number" step="any" value="'+esc(line.unit_cost||0)+'" style="width:85px"></td><td><input data-expiry type="date" style="width:130px"></td><td><input data-storage value="'+esc(line.storage_location||"")+'" placeholder="Location" style="width:110px"></td></tr>';
+    }).join("")||'<tr><td colspan="7">All order lines are fully received.</td></tr>';
+    $("#receipt-form",modal).onsubmit=async e=>{
+      e.preventDefault();
+      const btn=$("#receipt-save",modal);btn.disabled=true;btn.textContent="Posting receipt…";
+      const receipts=[...$("#receipt-lines",modal).querySelectorAll("tr[data-line]")].map(tr=>({
+        procurement_line_id:tr.dataset.line,
+        quantity:Number(tr.querySelector("[data-receive-qty]").value),
+        lot_code:tr.querySelector("[data-lot-code]").value.trim(),
+        unit_cost:Number(tr.querySelector("[data-unit-cost]").value),
+        expiry_date:tr.querySelector("[data-expiry]").value,
+        storage_location:tr.querySelector("[data-storage]").value
+      })).filter(x=>x.quantity>0);
+      if(!receipts.length){toast("Enter at least one received quantity.",true);btn.disabled=false;btn.textContent="Confirm receipt";return;}
+      if(receipts.some(x=>!x.lot_code)){toast("Lot/batch code is required for each received line.",true);btn.disabled=false;btn.textContent="Confirm receipt";return;}
+      try{
+        const result=await call("erpReceiveProcurement",procurementId,receipts);
+        close();toast("Receipt saved · "+result.status.replace(/_/g," "));
+        state.lookups={};fetchRows();
+      }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Confirm receipt";}
+    };
+  }catch(e){toast(e.message,true);}
+ }
+ async function openHarvestFinalization(harvestId){
+  try{
+    const sessionResult=await call("erpList","HarvestSessions",{limit:1000,filter:{harvest_id:harvestId}});
+    if(!sessionResult.rows.length)throw new Error("Harvest session not found.");
+    const session=sessionResult.rows[0];
+    const cycles=await call("erpList","CropCycles",{limit:1000,filter:{crop_cycle_id:session.crop_cycle_id}});
+    if(!cycles.rows.length)throw new Error("The linked crop cycle could not be found.");
+    const cycle=cycles.rows[0],crop=await lookupOptions("Crops"),varieties=await lookupOptions("Varieties");
+    const cropRecord=crop.find(c=>String(c.crop_id)===String(cycle.crop_id));
+    const variety=varieties.find(v=>String(v.variety_id)===String(cycle.variety_id));
+    const units=await lookupOptions("Units");
+    const unitOptions=units.map(u=>'<option value="'+esc(u.unit_symbol)+'">'+esc(u.unit_name)+" ("+esc(u.unit_symbol)+")</option>").join("");
+    const modal=document.createElement("dialog");
+    modal.innerHTML='<form class="dialog-body" id="harvest-form"><div class="dialog-head"><div><p>HARVEST / TRACEABILITY</p><h2>Finalise harvest session</h2><p>'+esc(session.harvest_date)+' · '+esc(cropRecord?cropRecord.crop_name:cycle.crop_id)+' · '+esc(variety?variety.variety_name:cycle.variety_id)+'</p></div><button type="button" class="icon-btn" id="harvest-close">×</button></div><div id="harvest-lines" class="form-grid"></div><div class="actions" style="margin-top:12px"><button type="button" class="btn secondary" id="add-harvest-line">＋ Add grade / disposition line</button></div><div class="notice">Saleable and processing produce will receive traceable produce lots. Internal use, quarantine and wastage remain separate dispositions.</div><div class="dialog-actions"><button type="button" class="btn secondary" id="harvest-cancel">Cancel</button><button type="submit" class="btn primary" id="harvest-save">Finalise session</button></div></form>';
+    document.body.append(modal);modal.showModal();
+    const close=()=>modal.close();$("#harvest-close",modal).onclick=close;$("#harvest-cancel",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
+    let lineNo=0;
+    const addLine=()=>{
+      const id=++lineNo,el=document.createElement("div");el.className="panel";el.dataset.harvestLine=String(id);
+      el.innerHTML='<div class="panel-head"><h3>Harvest line '+id+'</h3><button type="button" class="mini-btn" data-remove-line>Remove</button></div><div class="form-grid"><div class="field"><label>Grade</label><input data-grade placeholder="e.g. A / B / seconds"></div><div class="field"><label>Quantity *</label><input data-quantity required type="number" min="0.0001" step="any"></div><div class="field"><label>Unit *</label><select data-unit required><option value="">Select unit</option>'+unitOptions+'</select></div><div class="field"><label>Disposition *</label><select data-disposition><option value="sale">Saleable</option><option value="processing">Processing</option><option value="internal_use">Internal use</option><option value="quarantine">Quarantine</option><option value="wastage">Wastage</option></select></div><div class="field"><label>Produce lot code</label><input data-lot placeholder="Auto-generated when blank"></div><div class="field"><label>Storage location</label><input data-storage></div><div class="field full"><label>Notes</label><input data-notes></div></div>';
+      $("#harvest-lines",modal).append(el);
+      $("[data-remove-line]",el).onclick=()=>{if($("#harvest-lines",modal).children.length>1)el.remove();};
+    };
+    addLine();$("#add-harvest-line",modal).onclick=addLine;
+    $("#harvest-form",modal).onsubmit=async e=>{
+      e.preventDefault();const btn=$("#harvest-save",modal);btn.disabled=true;btn.textContent="Posting harvest…";
+      const lines=[...$("#harvest-lines",modal).querySelectorAll("[data-harvest-line]")].map(el=>({
+        crop_id:cycle.crop_id,variety_id:cycle.variety_id,
+        grade:el.querySelector("[data-grade]").value,
+        quantity:Number(el.querySelector("[data-quantity]").value),
+        unit:el.querySelector("[data-unit]").value,
+        disposition:el.querySelector("[data-disposition]").value,
+        lot_code:el.querySelector("[data-lot]").value,
+        storage_location:el.querySelector("[data-storage]").value,
+        notes:el.querySelector("[data-notes]").value
+      }));
+      if(lines.some(x=>!(x.quantity>0)||!x.unit)){toast("Each line requires a positive quantity and unit.",true);btn.disabled=false;btn.textContent="Finalise session";return;}
+      try{
+        const result=await call("erpFinalizeHarvest",harvestId,lines,"harvest-finalize:"+harvestId);
+        close();toast("Harvest finalised · "+result.lines.length+" traceable line(s).");state.lookups={};fetchRows();
+      }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Finalise session";}
+    };
+  }catch(e){toast(e.message,true);}
+ }
+ async function openOrderFulfilment(orderId){
+  try{
+    const orderData=await call("erpList","SalesOrders",{limit:1000,filter:{sales_order_id:orderId}});
+    if(!orderData.rows.length)throw new Error("Sales order not found.");
+    const order=orderData.rows[0];
+    const lines=(await call("erpList","SalesOrderLines",{limit:1000,filter:{sales_order_id:orderId}})).rows;
+    const products=await lookupOptions("Products");
+    const lots=await call("erpList","ProduceLots",{limit:1000,farmId:order.farm_id});
+    const allFulfil=await call("erpList","FulfilmentLines",{limit:1000});
+    const modal=document.createElement("dialog");
+    modal.innerHTML='<form class="dialog-body" id="fulfil-form"><div class="dialog-head"><div><p>SALES / ORDER FULFILMENT</p><h2>Fulfil order</h2><p>Order '+esc(order.order_number||orderId)+' · '+esc(order.status)+'</p></div><button type="button" class="icon-btn" id="fulfil-close">×</button></div><div id="fulfil-lines" class="form-grid"></div><div class="dialog-actions"><button type="button" class="btn secondary" id="fulfil-cancel">Cancel</button><button type="submit" class="btn primary" id="fulfil-save">Save fulfilment</button></div></form>';
+    document.body.append(modal);modal.showModal();
+    const close=()=>modal.close();$("#fulfil-close",modal).onclick=close;$("#fulfil-cancel",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
+    const active=lines.map(line=>{
+      const fulfilled=allFulfil.rows.filter(fl=>String(fl.sales_line_id)===String(line.sales_line_id)).reduce((sum,fl)=>sum+(Number(fl.quantity)||0),0);
+      return {line:line,remaining:Math.max(0,(Number(line.quantity_ordered)||0)-fulfilled)};
+    }).filter(x=>x.remaining>0.000001);
+    if(!active.length)throw new Error("All order lines are already fulfilled.");
+    $("#fulfil-lines",modal).innerHTML=active.map((x,index)=>{
+      const product=products.find(p=>String(p.product_id)===String(x.line.product_id))||{};
+      const eligible=lots.rows.filter(l=>String(l.crop_id)===String(product.crop_id)&&
+        (!product.grade||String(l.grade)===String(product.grade))&&String(l.unit)===String(x.line.unit)&&
+        String(l.status||"active").toLowerCase()==="active"&&Number(l.quantity_available)>0);
+      return '<div class="panel" data-order-line="'+esc(x.line.sales_line_id)+'"><h3>'+esc(product.product_name||x.line.description||"Order line")+'</h3><p>Outstanding '+esc(x.remaining)+' '+esc(x.line.unit)+'</p><div class="form-grid" style="margin-top:9px"><div class="field"><label>Produce lot *</label><select data-lot required><option value="">Select lot</option>'+eligible.map(l=>'<option value="'+esc(l.produce_lot_id)+'">'+esc(l.lot_code)+' · '+esc(l.grade)+' · available '+esc(l.quantity_available)+'</option>').join("")+'</select></div><div class="field"><label>Quantity to fulfil *</label><input data-quantity required type="number" min="0.0001" max="'+esc(x.remaining)+'" step="any" value="'+esc(Math.min(x.remaining,eligible.length?Number(eligible[0].quantity_available):0))+'"></div></div><small>'+ (eligible.length?"Only matching crop, grade and unit lots are listed.":"No matching stock lots are currently available.")+'</small></div>';
+    }).join("");
+    $("#fulfil-form",modal).onsubmit=async e=>{
+      e.preventDefault();const btn=$("#fulfil-save",modal);btn.disabled=true;btn.textContent="Saving fulfilment…";
+      const rows=[...$("#fulfil-lines",modal).querySelectorAll("[data-order-line]")];
+      const fulfilLines=rows.map(el=>({
+        sales_line_id:el.dataset.orderLine,produce_lot_id:el.querySelector("[data-lot]").value,
+        quantity:Number(el.querySelector("[data-quantity]").value)
+      })).filter(x=>x.quantity>0);
+      if(!fulfilLines.length||fulfilLines.some(x=>!x.produce_lot_id)){toast("Select a produce lot and enter a quantity for each line.",true);btn.disabled=false;btn.textContent="Save fulfilment";return;}
+      const reference="FUL-"+orderId+"-"+Date.now();
+      try{
+        const result=await call("erpFulfilSalesOrder",orderId,reference,fulfilLines,new Date().toISOString());
+        close();toast("Fulfilment saved · "+result.orderStatus.replace(/_/g," "));state.lookups={};fetchRows();
+      }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Save fulfilment";}
+    };
+  }catch(e){toast(e.message,true);}
+ }
+ async function createInvoice(orderId){
+  const dialog=document.createElement("dialog");
+  const defaultDue=new Date();defaultDue.setDate(defaultDue.getDate()+30);
+  dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><p>SALES / ACCOUNTS</p><h2>Create invoice</h2><p>Invoice only quantities already fulfilled and not previously invoiced.</p></div><button type="button" class="icon-btn" id="invoice-close">×</button></div><div class="field"><label>Due date</label><input type="date" id="invoice-due" value="'+defaultDue.toISOString().slice(0,10)+'"></div><div class="dialog-actions"><button class="btn secondary" id="invoice-cancel">Cancel</button><button class="btn primary" id="invoice-create">Create invoice</button></div></div>';
+  document.body.append(dialog);dialog.showModal();const close=()=>dialog.close();
+  $("#invoice-close",dialog).onclick=close;$("#invoice-cancel",dialog).onclick=close;dialog.addEventListener("close",()=>dialog.remove());
+  $("#invoice-create",dialog).onclick=async()=>{
+    const b=$("#invoice-create",dialog);b.disabled=true;b.textContent="Creating…";
+    try{
+      const result=await call("erpCreateInvoiceFromOrder",orderId,$("#invoice-due",dialog).value);
+      close();toast("Invoice "+result.invoice.invoice_number+" created · "+result.total+" "+(result.currency||""));
+      state.table="Invoices";state.view="sales";go("sales");
+    }catch(e){toast(e.message,true);b.disabled=false;b.textContent="Create invoice";}
+  };
+ }
  const fieldTables=new Set(["Organizations","Users","Roles","UserRoles","Teams","TeamMembers","Sites","Fields","Plots","Beds","Infrastructure","Units","Crops","Varieties","CropProfiles","PlantingCampaigns","PlantingPlans","CropCycles","CropCycleEvents","TaskTemplates","Tasks","TaskAssignments","People","Suppliers","InventoryItems","ProcurementOrders","ProcurementLines","StockLots","FarmMadeBatches","FarmMadeBatchInputs","HarvestSessions","ProduceLots","PackhouseOperations","Customers","Products","PriceLists","PriceListLines","SalesOrders","SalesOrderLines","Fulfilments","FulfilmentLines","Dispatches","Invoices","SalesReturns","SalesReturnLines","PaymentAccounts","CostAllocations","Assets","AssetUsage","Maintenance","CalendarEvents","EventParticipants","ActivityJournal","Attachments","DemandRecords","ForecastVersions","SavedViews"]);
  function inferType(h){
   const x=h.toLowerCase();
