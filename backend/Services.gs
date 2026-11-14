@@ -106,12 +106,49 @@ const ERP_KEYS = Object.freeze({
 
 const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
   Farms:["farm_name","farm_code"],Sites:["farm_id","site_name"],Fields:["farm_id","field_name"],
-  Plots:["farm_id","field_id","plot_name"],Crops:["crop_name"],Varieties:["crop_id","variety_name"],
-  CropCycles:["farm_id","plot_id","crop_id","start_date"],Tasks:["farm_id","title"],
-  People:["display_name"],InventoryItems:["item_name","base_unit"],Customers:["customer_name"],
-  Suppliers:["supplier_name"],SalesOrders:["farm_id","customer_id","order_date"],
-  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],
-  CalendarEvents:["farm_id","title","start_at"]
+  Plots:["farm_id","field_id","plot_name"],Beds:["farm_id","plot_id","bed_name"],
+  Infrastructure:["farm_id","infrastructure_type","name"],Units:["unit_name","unit_symbol","dimension"],
+  Crops:["crop_name"],Varieties:["crop_id","variety_name"],CropProfiles:["crop_id","production_system"],
+  PlantingCampaigns:["farm_id","campaign_name"],PlantingPlans:["farm_id","plot_id","crop_id","target_planting_date"],
+  CropCycles:["farm_id","plot_id","crop_id","start_date"],TaskTemplates:["template_name","task_type"],
+  Tasks:["farm_id","title"],TaskAssignments:["task_id"],People:["display_name"],Teams:["farm_id","team_name"],
+  Attendance:["farm_id","person_id","work_date","attendance_status"],Observations:["farm_id","plot_id","observed_at","category"],
+  IrrigationRuns:["farm_id","started_at"],IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"],
+  Applications:["farm_id","plot_id","applied_at","application_type"],
+  Suppliers:["supplier_name"],InventoryItems:["item_name","base_unit"],ProcurementOrders:["farm_id","supplier_id","order_date"],
+  ProcurementLines:["procurement_id","item_id","quantity_ordered"],StockLots:["item_id","lot_code","received_date"],
+  FarmMadeBatches:["farm_id","batch_name","start_date"],HarvestSessions:["farm_id","plot_id","crop_cycle_id","harvest_date"],
+  ProduceLots:["farm_id","crop_id","lot_code","quantity_available"],PackhouseOperations:["produce_lot_id","operation_type"],
+  Customers:["customer_name"],Products:["product_name","base_unit"],PriceLists:["price_list_name","currency_code"],
+  PriceListLines:["price_list_id","product_id","unit_price"],SalesOrders:["farm_id","customer_id","order_date"],
+  SalesOrderLines:["sales_order_id","product_id","quantity_ordered"],Fulfilments:["sales_order_id","fulfilment_date"],
+  FulfilmentLines:["fulfilment_id","sales_line_id","quantity"],Dispatches:["fulfilment_id","dispatch_date"],
+  Invoices:["farm_id","customer_id","invoice_number","invoice_date","total_amount"],PaymentAccounts:["farm_id","account_name"],
+  CostAllocations:["finance_entry_id","farm_id","allocation_basis","allocated_amount"],Assets:["farm_id","asset_name"],
+  AssetUsage:["asset_id","usage_date"],Maintenance:["asset_id","maintenance_type","scheduled_date"],
+  CalendarEvents:["farm_id","title","start_at"],ActivityJournal:["farm_id","occurred_at","title"],
+  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"]
+});
+
+const ERP_RELATIONS = Object.freeze({
+  organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",bed_id:"Beds",
+  crop_id:"Crops",variety_id:"Varieties",crop_profile_id:"CropProfiles",campaign_id:"PlantingCampaigns",
+  crop_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",template_id:"TaskTemplates",event_id:"CalendarEvents",
+  task_id:"Tasks",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
+  team_leader_id:"People",item_id:"InventoryItems",product_item_id:"InventoryItems",lot_id:"StockLots",
+  source_lot_id:"StockLots",supplier_id:"Suppliers",customer_id:"Customers",product_id:"Products",
+  price_list_id:"PriceLists",sales_order_id:"SalesOrders",sales_line_id:"SalesOrderLines",produce_lot_id:"ProduceLots",
+  fulfilment_id:"Fulfilments",invoice_id:"Invoices",account_id:"PaymentAccounts",finance_entry_id:"FinanceEntries",
+  asset_id:"Assets",custodian_id:"People",irrigation_run_id:"IrrigationRuns",harvest_id:"HarvestSessions",
+  procurement_id:"ProcurementOrders",batch_id:"FarmMadeBatches"
+});
+
+const ERP_UNIQUE_FIELDS = Object.freeze({
+  Farms:["farm_code"],Sites:["farm_id","site_code"],Fields:["farm_id","field_code"],
+  Plots:["field_id","plot_code"],Beds:["plot_id","bed_code"],Crops:["crop_name"],
+  Varieties:["crop_id","variety_name"],Users:["email"],InventoryItems:["item_code"],
+  Customers:["customer_name","phone"],Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
+  Tasks:["crop_cycle_id","template_id","due_at"]
 });
 
 function erpEnsureSchema_() {
