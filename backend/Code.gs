@@ -1,6 +1,6 @@
 /**
  * Farm Management API — database foundation
- * Version: 0.2.2
+ * Version: 0.4.0
  *
  * Bound to the Farm Management Database spreadsheet.
  * Run setupDatabase() manually once from the Apps Script editor.
@@ -9,7 +9,7 @@
 
 const APP_VERSION = "0.4.0";
 const APP_SERVICE = "farm-management-api";
-const SCHEMA_VERSION = "0.1.0";
+const SCHEMA_VERSION = "0.2.0";
 
 const TABLE_SCHEMAS = Object.freeze({
   AppConfig: ["config_key", "config_value", "updated_at"],
@@ -287,12 +287,33 @@ function upgradeMultiFarmSchema() {
 
   const farmsSheet = ss.getSheetByName("Farms");
   if (!farmsSheet) throw new Error("Farms tab is missing. Run the original database setup first.");
-  ensureTrailingHeaders_(farmsSheet, FARM_ADDITIONAL_COLUMNS, "Farms");
-  FARM_ADDITIONAL_COLUMNS.forEach(function(header) { appendedFarmColumns.push(header); });
+  const farmColumnResult = ensureTrailingHeaders_(farmsSheet, FARM_ADDITIONAL_COLUMNS, "Farms");
+  farmColumnResult.appended.forEach(function(header) { appendedFarmColumns.push(header); });
+
+  // Record the installed schema version while preserving the original install timestamp.
+  const schemaSheet = ss.getSheetByName("SchemaInfo");
+  if (!schemaSheet) throw new Error("SchemaInfo tab is missing. Run the original database setup first.");
+  const schemaHeaders = schemaSheet.getRange(1, 1, 1, schemaSheet.getLastColumn()).getDisplayValues()[0];
+  const schemaVersionCol = schemaHeaders.indexOf("schema_version") + 1;
+  const installedAtCol = schemaHeaders.indexOf("installed_at") + 1;
+  const appVersionCol = schemaHeaders.indexOf("app_version") + 1;
+  if (!schemaVersionCol || !installedAtCol || !appVersionCol) {
+    throw new Error("SchemaInfo headers are incomplete. No schema version metadata was changed.");
+  }
+  if (schemaSheet.getLastRow() < 2) {
+    const metadata = [];
+    metadata[schemaVersionCol - 1] = SCHEMA_VERSION;
+    metadata[installedAtCol - 1] = new Date().toISOString();
+    metadata[appVersionCol - 1] = APP_VERSION;
+    schemaSheet.appendRow(metadata);
+  } else {
+    schemaSheet.getRange(2, schemaVersionCol).setValue(SCHEMA_VERSION);
+    schemaSheet.getRange(2, appVersionCol).setValue(APP_VERSION);
+  }
 
   const result = {
     ok: true,
-    schemaVersion: "0.2.0",
+    schemaVersion: SCHEMA_VERSION,
     appVersion: APP_VERSION,
     createdTabs: createdTabs,
     verifiedTabs: Object.keys(MULTI_FARM_TABLE_SCHEMAS),
