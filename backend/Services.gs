@@ -135,7 +135,7 @@ const ERP_RELATIONS = Object.freeze({
   crop_id:"Crops",variety_id:"Varieties",crop_profile_id:"CropProfiles",campaign_id:"PlantingCampaigns",
   crop_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",template_id:"TaskTemplates",event_id:"CalendarEvents",
   task_id:"Tasks",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
-  team_leader_id:"People",item_id:"InventoryItems",product_item_id:"InventoryItems",lot_id:"StockLots",
+  resulting_task_id:"Tasks",team_leader_id:"People",item_id:"InventoryItems",product_item_id:"InventoryItems",lot_id:"StockLots",
   source_lot_id:"StockLots",supplier_id:"Suppliers",customer_id:"Customers",product_id:"Products",
   price_list_id:"PriceLists",sales_order_id:"SalesOrders",sales_line_id:"SalesOrderLines",produce_lot_id:"ProduceLots",
   fulfilment_id:"Fulfilments",invoice_id:"Invoices",account_id:"PaymentAccounts",finance_entry_id:"FinanceEntries",
@@ -375,6 +375,7 @@ function erpPostLedger(table,record,idempotencyKey){
     const required=ERP_LEDGER_REQUIRED[table]||[];
     const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
     if(missing.length)throw new Error("Required fields: "+missing.join(", "));
+    erpValidateRelations_(data);
     if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))throw new Error("Quantity must be greater than zero.");
     if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
       const available=erpStockBalance(data.item_id,data.lot_id);
