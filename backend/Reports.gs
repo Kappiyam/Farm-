@@ -9,11 +9,45 @@ function erpReportDates_(filters){
 function erpFilterFarm_(rows,farmId){
   return farmId?rows.filter(r=>String(r.farm_id||"")===String(farmId)):rows;
 }
+
+/**
+ * Reports must scope child rows through their parent record when the child
+ * intentionally has no redundant farm_id column.
+ */
+function erpReadReportRows_(table,farmId){
+  const rows=erpRead_(table,{limit:1000}).rows;
+  if(!farmId)return rows;
+  if(rows.some(r=>Object.prototype.hasOwnProperty.call(r,"farm_id")))
+    return rows.filter(r=>String(r.farm_id||"")===String(farmId));
+  const parentMap={
+    TaskExecution:["Tasks","task_id"],
+    TaskAssignments:["Tasks","task_id"],
+    TaskStatusHistory:["Tasks","task_id"],
+    HarvestLines:["HarvestSessions","harvest_id"],
+    FulfilmentLines:["Fulfilments","fulfilment_id"],
+    InvoiceLines:["Invoices","invoice_id"],
+    SalesOrderLines:["SalesOrders","sales_order_id"],
+    SalesReturnLines:["SalesReturns","return_id"],
+    ProcurementLines:["ProcurementOrders","procurement_id"],
+    FarmMadeBatchInputs:["FarmMadeBatches","batch_id"],
+    PackhouseOperations:["ProduceLots","produce_lot_id"],
+    AssetUsage:["Assets","asset_id"],
+    Maintenance:["Assets","asset_id"],
+    EventParticipants:["CalendarEvents","event_id"],
+    CalendarEventOverrides:["CalendarEvents","event_id"],
+    CalendarEventOccurrences:["CalendarEvents","event_id"]
+  };
+  const relation=parentMap[table];
+  if(!relation)return [];
+  const parents=erpRead_(relation[0],{limit:1000,farmId:farmId}).rows;
+  const parentIds=new Set(parents.map(r=>String(r[ERP_KEYS[relation[0]]]||"")));
+  return rows.filter(r=>parentIds.has(String(r[relation[1]]||"")));
+}
 function erpReport(name,filters){
   filters=filters||{};
   const range=erpReportDates_(filters),farmId=filters.farmId||"";
   const inRange=v=>!v|| (erpDateKey_(v)>=range.start&&erpDateKey_(v)<=range.end);
-  const read=(table)=>erpFilterFarm_(erpRead_(table,{limit:1000}).rows,farmId);
+  const read=(table)=>erpReadReportRows_(table,farmId);
   let rows=[],summary={},methodology="";
   if(name==="production"){
     const crops={};read("CropCycles").filter(c=>inRange(c.start_date)).forEach(c=>{
