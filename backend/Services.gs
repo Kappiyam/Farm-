@@ -277,6 +277,14 @@ function erpValidateRecord_(table,record,id){
     }
   });
   erpValidateRelations_(record);
+  if(table==="CostAllocations"){
+    const entry=erpGetRecord_("FinanceEntries",record.finance_entry_id);
+    const existingAlloc=erpRead_("CostAllocations",{limit:1000,filter:{finance_entry_id:record.finance_entry_id}}).rows
+      .filter(a=>String(a.allocation_id)!==String(id))
+      .reduce((sum,a)=>sum+(Number(a.allocated_amount)||0),0);
+    const proposed=existingAlloc+(Number(record.allocated_amount)||0);
+    if(proposed>(Number(entry.amount)||0)+0.000001)throw new Error("Cost allocations cannot exceed the source transaction amount.");
+  }
   const unique=ERP_UNIQUE_FIELDS[table]||[];
   if(unique.length&&unique.every(f=>record[f]!==undefined&&record[f]!==null&&String(record[f]).trim()!=="")){
     const current=ERP_KEYS[table];
@@ -325,6 +333,7 @@ function erpSave(table,record){
     if(isUpdate)sh.getRange(rowNum,1,1,headers.length).setValues([values]);
     else sh.appendRow(values);
     erpAudit_(table,id,isUpdate?"update":"create",before,record);
+    try{CacheService.getScriptCache().remove("ERP:"+table+":"+id);}catch(e){}
     return {ok:true,table:table,id:id,created:!isUpdate,record:erpObject_(headers,values)};
   });
 }
