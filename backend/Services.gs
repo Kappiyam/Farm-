@@ -282,8 +282,9 @@ function erpRead_(table,options){
 
 function erpValue_(v){return v instanceof Date?v.toISOString():v;}
 
-function erpValidateRelations_(record){
+function erpValidateRelations_(record,table){
   Object.keys(ERP_RELATIONS).forEach(field=>{
+    if(table&&ERP_KEYS[table]===field)return;
     const value=record[field];
     if(value===undefined||value===null||String(value)==="")return;
     const target=ERP_RELATIONS[field],targetKey=ERP_KEYS[target];
@@ -323,7 +324,7 @@ function erpValidateRecord_(table,record,id){
       throw new Error("Required field: "+field);
     }
   });
-  erpValidateRelations_(record);
+  erpValidateRelations_(record,table);
   if(table==="CostAllocations"){
     const entry=erpGetRecord_("FinanceEntries",record.finance_entry_id);
     const existingAlloc=erpRead_("CostAllocations",{limit:1000,filter:{finance_entry_id:record.finance_entry_id}}).rows
@@ -502,7 +503,7 @@ function erpPostLedger(table,record,idempotencyKey){
     const required=ERP_LEDGER_REQUIRED[table]||[];
     const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
     if(missing.length)throw new Error("Required fields: "+missing.join(", "));
-    erpValidateRelations_(data);
+    erpValidateRelations_(data,table);
     if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))
       throw new Error("Quantity must be greater than zero.");
     if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
@@ -616,7 +617,7 @@ function erpGetDashboard(farmId){
 }
 
 function erpGetSchema(){
-  return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED,ledgerRequired:ERP_LEDGER_REQUIRED};
+  return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED,ledgerRequired:ERP_LEDGER_REQUIRED,archivable:Array.from(ERP_ARCHIVABLE)};
 }
 
 const ERP_ARCHIVABLE = new Set([
@@ -630,4 +631,3 @@ function erpCsv(table){
   const d=erpList(table,{limit:1000}),rows=[d.headers].concat(d.rows.map(r=>d.headers.map(h=>r[h]??"")));
   return rows.map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n");
 }
-function erpGetSchema(){return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED};}
