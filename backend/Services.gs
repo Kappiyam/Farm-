@@ -152,7 +152,7 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   StockLots:["item_id","lot_code"],ProduceLots:["farm_id","lot_code"],
   Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
   InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
-  Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
+  Suppliers:["supplier_name","phone"],Products:["product_name","grade"],Invoices:["invoice_number"],
   Tasks:["crop_cycle_id","template_id","due_at"]
 });
 
