@@ -307,6 +307,7 @@ function erpValidateRelations_(record,table){
 const ERP_CALCULATED_FIELDS = Object.freeze({
   ProcurementLines:["quantity_received"],
   SalesOrderLines:["quantity_fulfilled"],
+  StockLots:["quantity_available"],
   ProduceLots:["quantity_available"]
 });
 
@@ -584,7 +585,8 @@ function erpPostLedger(table,record,idempotencyKey){
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
     erpAudit_(table,id,"post",{},data);
     erpSetIdempotencyStatus_(keys,keyRow,{result_id:id,status:"complete",updated_at:new Date()});
-    if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);\n    if(table==="InventoryTransactions"&&data.lot_id)erpUpdateStockLotSnapshot_(data.lot_id);
+    if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);
+    if(table==="InventoryTransactions"&&data.lot_id)erpUpdateStockLotSnapshot_(data.lot_id);
     return {ok:true,duplicate:false,id:id};
   });
 }
