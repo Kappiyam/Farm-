@@ -174,7 +174,7 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
   InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
   Suppliers:["supplier_name","phone"],Products:["product_name","grade"],Invoices:["invoice_number"],
-  Tasks:["crop_cycle_id","template_id","due_at"]
+  Tasks:["crop_cycle_id","template_id","due_at"],\n  CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
 });
 
 function erpEnsureSchema_() {
