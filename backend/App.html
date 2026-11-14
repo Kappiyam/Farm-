@@ -49,7 +49,7 @@
 (function(){
  "use strict";
  const $=s=>document.querySelector(s);
- const state={view:"dashboard",table:"",farmId:"",language:"en",bootstrap:null,schema:null,rows:[],total:0,offset:0,limit:100,search:"",lookups:{},busy:false};
+ const state={view:"dashboard",table:"",farmId:"",language:"en",bootstrap:null,schema:null,rows:[],total:0,offset:0,limit:100,search:"",lookups:{},busy:false,reportData:null};
  const modules=[
   {key:"dashboard",label:"Dashboard",group:"Overview",icon:"▦",desc:"Today's operational priorities with farm-wide performance and exceptions."},
   {key:"calendar",label:"Calendar & journal",group:"Overview",icon:"▣",desc:"Events, recurrences, reminders and daily activity records."},
@@ -132,25 +132,27 @@
  }
  function defaultTable(key){return (tableGroups[key]||[])[0]?.[1]||"Farms";}
  function loadModule(key){
-  const m=title(key),tabs=tableGroups[key]||[];if(!tabs.length){$("#content").innerHTML='<div class="empty"><strong>Module unavailable</strong></div>';return;}
+  if(key==="reports"){renderReportsModule();return;}
+  const m=title(key),tabs=tableGroups[key]||[];
+  if(!tabs.length){$("#content").innerHTML='<div class="empty"><strong>Module unavailable</strong></div>';return;}
   if(!tabs.some(x=>x[1]===state.table))state.table=defaultTable(key);
   renderModuleFrame(m,tabs);
   fetchRows();
  }
  function renderModuleFrame(m,tabs){
-  $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / '+esc(m.group.toUpperCase())+'</div><h2>'+esc(m.label)+'</h2><p>'+esc(m.desc)+'</p></div><span class="symbol">'+m.icon+'</span></section><div class="tabs">'+tabs.map(x=>'<button class="tab '+(state.table===x[1]?"active":"")+'" data-table="'+esc(x[1])+'">'+esc(x[0])+'</button>').join("")+'</div><div class="toolbar"><div class="search"><span>⌕</span><input id="record-search" placeholder="'+t("search")+'" value="'+esc(state.search)+'"></div><div class="toolbar-right"><button class="btn secondary" id="export-btn">↓ '+t("export")+'</button><button class="btn primary" id="new-btn">＋ '+t("new")+'</button></div></div><article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+esc(tabs.find(x=>x[1]===state.table)[0])+'</h3><p id="record-count">Loading records…</p></div><span class="tag">'+(ledgerTables.has(state.table)?"Append-only transaction":"Managed records")+'</span></div><div class="table-wrap" id="table-wrap"></div><div class="mobile-records" id="mobile-records"></div><div class="table-foot"><span id="page-info"></span><div><button class="btn ghost" id="prev-page">Previous</button><button class="btn ghost" id="next-page">Next</button></div></div></article>';
+  const extra=m.key==="demand"?'<section class="panel planner-panel"><div class="panel-head"><div><h3>Production gap calculator</h3><p>Confirmed demand, forecasts, available produce and projected crop supply remain separately visible.</p></div><span class="tag">Planning tool</span></div><div class="form-grid"><div class="field"><label>Period start</label><input type="date" id="demand-start"></div><div class="field"><label>Period end</label><input type="date" id="demand-end"></div></div><div class="actions" style="margin-top:12px"><button class="btn primary" id="run-demand">Calculate production gap</button></div><div id="demand-results"></div></section>':'';
+  $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / '+esc(m.group.toUpperCase())+'</div><h2>'+esc(m.label)+'</h2><p>'+esc(m.desc)+'</p></div><span class="symbol">'+m.icon+'</span></section>'+extra+'<div class="tabs">'+tabs.map(x=>'<button class="tab '+(state.table===x[1]?"active":"")+'" data-table="'+esc(x[1])+'">'+esc(x[0])+'</button>').join("")+'</div><div class="toolbar"><div class="search"><span>⌕</span><input id="record-search" placeholder="'+t("search")+'" value="'+esc(state.search)+'"></div><div class="toolbar-right"><button class="btn secondary" id="export-btn">↓ '+t("export")+'</button><button class="btn primary" id="new-btn">＋ '+t("new")+'</button></div></div><article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+esc(tabs.find(x=>x[1]===state.table)[0])+'</h3><p id="record-count">Loading records…</p></div><span class="tag">'+(ledgerTables.has(state.table)?"Append-only transaction":"Managed records")+'</span></div><div class="table-wrap" id="table-wrap"></div><div class="mobile-records" id="mobile-records"></div><div class="table-foot"><span id="page-info"></span><div><button class="btn ghost" id="prev-page">Previous</button><button class="btn ghost" id="next-page">Next</button></div></div></article>';
   $("#content").querySelectorAll("[data-table]").forEach(b=>b.onclick=()=>{state.table=b.dataset.table;state.offset=0;state.search="";loadModule(state.view);});
   $("#record-search").onkeydown=e=>{if(e.key==="Enter"){state.search=e.target.value;state.offset=0;fetchRows();}};
   $("#new-btn").disabled=!state.schema.keys[state.table]&&!ledgerTables.has(state.table);$("#new-btn").onclick=()=>openRecord(state.table,null);
   $("#export-btn").onclick=exportCsv;
   $("#prev-page").onclick=()=>{state.offset=Math.max(0,state.offset-state.limit);fetchRows();};
   $("#next-page").onclick=()=>{if(state.offset+state.limit<state.total){state.offset+=state.limit;fetchRows();}};
- }
- function displayColumns(table){
-  const headers=state.schema.tables[table]||[];
-  const key=state.schema.keys[table];
-  const technical=new Set([key,"created_at","updated_at","created_by","recorded_by","assigned_by","reviewed_by","uploaded_by","actor_user_id","idempotency_key","permissions_json","checklist_json","assumptions_json","coverage_json","parts_json","resource_rates_json","harvest_profile_json"]);
-  return headers.filter(h=>!technical.has(h)).slice(0,7);
+  if(m.key==="demand"){
+    const now=new Date(),future=new Date();future.setDate(now.getDate()+30);
+    $("#demand-start").value=now.toISOString().slice(0,10);$("#demand-end").value=future.toISOString().slice(0,10);
+    $("#run-demand").onclick=runDemandPlanner;
+  }
  }
  function fetchRows(){
   const farmField=(state.schema.tables[state.table]||[]).includes("farm_id");
