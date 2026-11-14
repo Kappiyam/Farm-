@@ -136,6 +136,21 @@ function erpEnsureSchema_() {
       appended.push({table:name,columns:missing});
     }
   });
+  let versionSheet=ss.getSheetByName("SchemaInfo");
+  if(!versionSheet){
+    versionSheet=ss.insertSheet("SchemaInfo");
+    versionSheet.getRange(1,1,1,3).setValues([["schema_version","installed_at","app_version"]]);
+    versionSheet.appendRow([ERP_SCHEMA_VERSION,new Date(),ERP_VERSION]);
+    versionSheet.setFrozenRows(1);
+    created.push("SchemaInfo");
+  }else{
+    const vh=versionSheet.getRange(1,1,1,versionSheet.getLastColumn()).getDisplayValues()[0];
+    const vc=vh.indexOf("schema_version")+1,ac=vh.indexOf("app_version")+1;
+    if(vc&&ac&&versionSheet.getLastRow()>=2){
+      versionSheet.getRange(2,vc).setValue(ERP_SCHEMA_VERSION);
+      versionSheet.getRange(2,ac).setValue(ERP_VERSION);
+    }
+  }
   return {created:created,appended:appended};
 }
 
@@ -243,7 +258,7 @@ function erpArchive(table,id,reason){
   const record=data.rows[0];
   if(!("status" in record))throw new Error("This record type cannot be archived.");
   record.status="inactive";
-  record.archive_reason=reason||"Archived by user";
+  if("notes" in record)record.notes=[record.notes,reason||"Archived by user"].filter(Boolean).join(" | ");
   return erpSave(table,record);
 }
 
@@ -282,8 +297,16 @@ function erpPostLedger(table,record,idempotencyKey){
     const now=new Date(),id=Utilities.getUuid(),data=Object.assign({},record);
     const idField=ERP_KEYS[table]||({InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id"})[table];
     data[idField]=id;if(!data.created_at)data.created_at=now;
-    if("recorded_by" in headers&&!data.recorded_by)data.recorded_by=erpActor_();
-    if("idempotency_key" in headers)data.idempotency_key=idempotencyKey;
+    if(headers.indexOf("recorded_by")>=0&&!data.recorded_by)data.recorded_by=erpActor_();
+    if(headers.indexOf("idempotency_key")>=0)data.idempotency_key=idempotencyKey;
+    const required=ERP_LEDGER_REQUIRED[table]||[];
+    const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
+    if(missing.length)throw new Error("Required fields: "+missing.join(", "));
+    if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))throw new Error("Quantity must be greater than zero.");
+    if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
+      const available=erpStockBalance(data.item_id,data.lot_id);
+      if(available<Number(data.quantity))throw new Error("Insufficient available stock. Available: "+available);
+    }
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
     keys.appendRow([idempotencyKey,table,id,now]);
     erpAudit_(table,id,"post",{},data);
