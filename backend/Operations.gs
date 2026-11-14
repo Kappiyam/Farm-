@@ -23,8 +23,9 @@ function erpUpdateProduceLotSnapshot_(lotId){
   if(!lot)return;
   const balance=erpProduceLotBalance_(lotId);
   const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ProduceLots");
+  if(sh.getLastRow()<2)return;
   const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
-  const rowIndex=sh.getRange(2,headers.indexOf("produce_lot_id")+1,Math.max(0,sh.getLastRow()-1),1)
+  const rowIndex=sh.getRange(2,headers.indexOf("produce_lot_id")+1,sh.getLastRow()-1,1)
     .getDisplayValues().findIndex(r=>String(r[0])===String(lotId));
   if(rowIndex<0)return;
   const quantityCol=headers.indexOf("quantity_available")+1;
