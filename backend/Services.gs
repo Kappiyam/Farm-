@@ -150,7 +150,7 @@ const ERP_REQUIRED = Object.freeze({
   CostAllocations:["finance_entry_id","farm_id","allocation_basis","allocated_amount"],Assets:["farm_id","asset_name"],
   AssetUsage:["asset_id","usage_date"],Maintenance:["asset_id","maintenance_type","scheduled_date"],
   CalendarEvents:["farm_id","title","start_at"],CalendarEventOverrides:["event_id","occurrence_start","action"],CalendarEventOccurrences:["event_id","occurrence_start","title"],ActivityJournal:["farm_id","occurred_at","title"],
-  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"]
+  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"],\n  EventParticipants:["event_id","person_id"]
 });
 
 const ERP_RELATIONS = Object.freeze({
@@ -363,6 +363,7 @@ function erpSave(table,record){
     const last=sh.getLastRow();let rowNum=0;
     if(last>=2){const ids=sh.getRange(2,keyCol,last-1,1).getDisplayValues().flat();const i=ids.indexOf(id);if(i>=0)rowNum=i+2;}
     const isUpdate=!!rowNum;
+    if(table==="CalendarEvents"&&isUpdate)throw new Error("Edit calendar occurrences or series through the calendar editor so historical instances are preserved.");
     const old=isUpdate?sh.getRange(rowNum,1,1,headers.length).getValues()[0]:new Array(headers.length).fill("");
     const before=erpObject_(headers,old);
     const merged=Object.assign({},before,record);
