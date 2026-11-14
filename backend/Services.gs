@@ -362,6 +362,7 @@ function erpValidateRecord_(table,record,id){
 
 /** Generic master/planning record create/update. Posted ledgers use dedicated services. */
 function erpSave(table,record){
+  if(ERP_READ_ONLY_TABLES.has(table))throw new Error("This system table is read-only.");
   if(!ERP_KEYS[table])throw new Error("This record type is not editable through the generic service.");
   if(!record||typeof record!=="object"||Array.isArray(record))throw new Error("Record data is required.");
   return erpWithLock_(()=>{
@@ -627,8 +628,10 @@ function erpGetDashboard(farmId){
 }
 
 function erpGetSchema(){
-  return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED,ledgerRequired:ERP_LEDGER_REQUIRED,archivable:Array.from(ERP_ARCHIVABLE)};
+  return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED,ledgerRequired:ERP_LEDGER_REQUIRED,archivable:Array.from(ERP_ARCHIVABLE),readOnly:Array.from(ERP_READ_ONLY_TABLES)};
 }
+
+const ERP_READ_ONLY_TABLES = new Set(["AuditLog","IdempotencyKeys"]);
 
 const ERP_ARCHIVABLE = new Set([
   "Users","Roles","Farms","Sites","Fields","Plots","Beds","Infrastructure","Units","Crops",
