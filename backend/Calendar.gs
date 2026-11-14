@@ -47,6 +47,7 @@ function erpCalStep_(base,type,interval,index){
 }
 function erpCalOccurrencesForMaster_(event,startValue,endValue){
   const start=erpCalDate_(event.start_at),end=erpCalDate_(endValue);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(String(endValue)))end.setHours(23,59,59,999);
   const rangeStart=erpCalDate_(startValue);
   const type=String(event.recurrence_type||"none").toLowerCase();
   const recurring=["daily","weekly","monthly","yearly","custom"].includes(type);
@@ -76,7 +77,7 @@ function erpCalOccurrencesForMaster_(event,startValue,endValue){
   // Iterate from the series origin to preserve recurrence numbering and interval semantics.
   let current=new Date(start.getTime());
   while(current<=end&&index<10000){
-    if(recurrenceEnd&&current>recurrenceEnd)break;
+    if(recurrenceEnd&&erpCalDateOnly_(current)>erpCalDateOnly_(recurrenceEnd))break;
     if(countLimit&&index>=countLimit)break;
     if(current>=rangeStart)push(current,index);
     index++;
@@ -106,6 +107,7 @@ function erpCalApplyOverrides_(occurrences,overrides){
 /** Return calendar instances for day/week/month/year/agenda clients. */
 function erpGetCalendarRange(farmId,startDate,endDate){
   const start=erpCalDate_(startDate),end=erpCalDate_(endDate);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(String(endDate)))end.setHours(23,59,59,999);
   if(end<start)throw new Error("Calendar end date must not be before start date.");
   const masters=erpRead_("CalendarEvents",{limit:5000}).rows
     .filter(e=>!farmId||String(e.farm_id)===String(farmId));
