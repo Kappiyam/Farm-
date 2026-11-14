@@ -8,6 +8,11 @@ const ERP_SCHEMA_VERSION = "1.0.0";
 
 const ERP_TABLES = Object.freeze({
   Organizations: ["organization_id","organization_name","organization_code","status","created_at","updated_at"],
+  Users: ["user_id","display_name","email","phone","status","preferred_language","pin_hash","last_login_at","created_at","updated_at"],
+  Roles: ["role_id","role_name","description","permissions_json","is_system_role","status","created_at","updated_at"],
+  UserRoles: ["user_role_id","user_id","role_id","scope_type","scope_id","assigned_by","created_at"],
+  Teams: ["team_id","farm_id","team_name","team_leader_id","status","created_at","updated_at"],
+  TeamMembers: ["team_member_id","team_id","person_id","valid_from","valid_to","status","created_at","updated_at"],
   OrganizationUsers: ["organization_user_id","organization_id","user_id","membership_role","status","created_at","updated_at"],
   FarmMemberships: ["farm_membership_id","farm_id","user_id","role_id","status","created_at","updated_at"],
   FarmSettings: ["farm_setting_id","farm_id","setting_key","setting_value","updated_at"],
@@ -80,7 +85,7 @@ const ERP_TABLES = Object.freeze({
 });
 
 const ERP_KEYS = Object.freeze({
-  Organizations:"organization_id",OrganizationUsers:"organization_user_id",FarmMemberships:"farm_membership_id",FarmSettings:"farm_setting_id",
+  Organizations:"organization_id",Users:"user_id",Roles:"role_id",UserRoles:"user_role_id",Teams:"team_id",TeamMembers:"team_member_id",OrganizationUsers:"organization_user_id",FarmMemberships:"farm_membership_id",FarmSettings:"farm_setting_id",
   Farms:"farm_id",Sites:"site_id",Fields:"field_id",Plots:"plot_id",Beds:"bed_id",Infrastructure:"infrastructure_id",
   Units:"unit_id",Crops:"crop_id",Varieties:"variety_id",CropProfiles:"crop_profile_id",PlantingCampaigns:"campaign_id",
   PlantingPlans:"planting_plan_id",CropCycles:"crop_cycle_id",CropCycleEvents:"cycle_event_id",TaskTemplates:"template_id",
@@ -99,7 +104,7 @@ const ERP_KEYS = Object.freeze({
   SavedViews:"saved_view_id"
 });
 
-const ERP_REQUIRED = Object.freeze({
+const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
   Farms:["farm_name","farm_code"],Sites:["farm_id","site_name"],Fields:["farm_id","field_name"],
   Plots:["farm_id","field_id","plot_name"],Crops:["crop_name"],Varieties:["crop_id","variety_name"],
   CropCycles:["farm_id","plot_id","crop_id","start_date"],Tasks:["farm_id","title"],
