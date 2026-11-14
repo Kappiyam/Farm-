@@ -93,7 +93,7 @@ function erpCalApplyOverrides_(occurrences,overrides){
   return occurrences.map(item=>{
     const override=map[erpCalOverrideKey_(item.event_id,item.occurrence_start)];
     if(!override)return item;
-    if(String(override.action).toLowerCase()==="cancel")return null;
+    if(String(override.action).toLowerCase()==="cancel")return Object.assign({},item,{status:"cancelled",has_override:true,override_id:override.override_id});
     let values={};
     try{values=JSON.parse(override.overrides_json||"{}");}catch(e){}
     const updated=Object.assign({},item,values,{override_id:override.override_id,has_override:true});
@@ -230,6 +230,8 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
     Object.keys(changes).forEach(k=>{if(allowedSingle.indexOf(k)<0)throw new Error("Single-occurrence edits cannot change "+k+".");});
     const prior=erpFindOne_("CalendarEventOverrides",{event_id:eventId,occurrence_start:erpCalKey_(occurrence)});
     const merged=Object.assign({},prior&&prior.overrides_json?JSON.parse(prior.overrides_json):{},changes);
+    if(merged.start_at&&merged.end_at&&erpCalDate_(merged.end_at)<erpCalDate_(merged.start_at))
+      throw new Error("Event end must not be before its start.");
     if(prior){
       const saved=erpSave("CalendarEventOverrides",{override_id:prior.override_id,
         event_id:eventId,occurrence_start:erpCalKey_(occurrence),action:"update",
@@ -247,6 +249,9 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
       return {ok:true,scope:scope,event:updated,pastOccurrencesPreserved:true};
     }
     if(occurrence<erpCalDate_(event.start_at))throw new Error("Selected occurrence is before the series start.");
+    const matching=erpCalOccurrencesForMaster_(event,occurrence,occurrence);
+    if(!matching.length||erpCalKey_(matching[0].occurrence_start)!==erpCalKey_(occurrence))
+      throw new Error("Selected date is not an occurrence in this recurring series.");
     const previousEnd=erpCalAddDays_(occurrence,-1);
     erpUpdateCalendarEventRow_(eventId,{recurrence_end:erpCalDateOnly_(previousEnd)}, "Series split before future edit");
     const newStart=changes.start_at?erpCalWithDate_(changes.start_at,occurrence):erpCalWithDate_(event.start_at,occurrence);
