@@ -52,6 +52,7 @@ const ERP_TABLES = Object.freeze({
   HarvestSessions: ["harvest_id","farm_id","field_id","plot_id","crop_cycle_id","harvest_date","start_time","end_time","harvest_team","status","notes","recorded_by","created_at","updated_at"],
   HarvestLines: ["harvest_line_id","harvest_id","crop_id","variety_id","grade","quantity","unit","disposition","produce_lot_id","notes"],
   ProduceLots: ["produce_lot_id","farm_id","crop_id","variety_id","source_plot_id","source_cycle_id","lot_code","grade","quantity_available","unit","harvest_date","storage_location","quality_status","status","created_at","updated_at"],
+  ProduceLotMovements: ["produce_lot_movement_id","produce_lot_id","movement_type","quantity","unit","occurred_at","reference_type","reference_id","idempotency_key","recorded_by","reason","created_at"],
   PackhouseOperations: ["packhouse_operation_id","produce_lot_id","operation_type","operation_date","input_quantity","output_quantity","unit","loss_quantity","notes","recorded_by","created_at"],
   Customers: ["customer_id","customer_name","customer_type","contact_name","phone","email","billing_address","delivery_address","payment_terms","status","created_at","updated_at"],
   Products: ["product_id","product_name","product_category","crop_id","variety_id","grade","base_unit","default_price","currency_code","status","created_at","updated_at"],
@@ -94,7 +95,7 @@ const ERP_KEYS = Object.freeze({
   IrrigationOperations:"irrigation_operation_id",Applications:"application_id",Suppliers:"supplier_id",
   InventoryItems:"item_id",ProcurementOrders:"procurement_id",ProcurementLines:"procurement_line_id",StockLots:"lot_id",
   FarmMadeBatches:"batch_id",FarmMadeBatchInputs:"batch_input_id",HarvestSessions:"harvest_id",HarvestLines:"harvest_line_id",
-  ProduceLots:"produce_lot_id",PackhouseOperations:"packhouse_operation_id",Customers:"customer_id",Products:"product_id",
+  ProduceLots:"produce_lot_id",ProduceLotMovements:"produce_lot_movement_id",PackhouseOperations:"packhouse_operation_id",Customers:"customer_id",Products:"product_id",
   PriceLists:"price_list_id",PriceListLines:"price_line_id",SalesOrders:"sales_order_id",SalesOrderLines:"sales_line_id",
   Fulfilments:"fulfilment_id",FulfilmentLines:"fulfilment_line_id",Dispatches:"dispatch_id",Invoices:"invoice_id",
   Payments:"payment_id",SalesReturns:"return_id",SalesReturnLines:"return_line_id",FinanceEntries:"finance_entry_id",
@@ -104,7 +105,7 @@ const ERP_KEYS = Object.freeze({
   SavedViews:"saved_view_id"
 });
 
-const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
+const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  ProduceLotMovements:["produce_lot_id","movement_type","quantity","unit","occurred_at"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
   Farms:["farm_name","farm_code"],Sites:["farm_id","site_name"],Fields:["farm_id","field_name"],
   Plots:["farm_id","field_id","plot_name"],Beds:["farm_id","plot_id","bed_name"],
   Infrastructure:["farm_id","infrastructure_type","name"],Units:["unit_name","unit_symbol","dimension"],
@@ -355,7 +356,7 @@ function erpAudit_(type,id,action,before,after){
 
 /** Idempotent append-only ledger operation. A key is mandatory for retryable writes. */
 function erpPostLedger(table,record,idempotencyKey){
-  const allowed=["InventoryTransactions","FinanceEntries","Payments","WageTransactions","IrrigationOperations","TaskExecution","HarvestLines","Attendance"];
+  const allowed=["InventoryTransactions","FinanceEntries","Payments","WageTransactions","IrrigationOperations","TaskExecution","HarvestLines","Attendance","ProduceLotMovements"];
   if(allowed.indexOf(table)<0)throw new Error("Unsupported ledger.");
   if(!idempotencyKey)throw new Error("An idempotency key is required.");
   if(!record||typeof record!=="object")throw new Error("Record data is required.");
@@ -368,7 +369,7 @@ function erpPostLedger(table,record,idempotencyKey){
     const unknown=Object.keys(record).filter(k=>headers.indexOf(k)<0);
     if(unknown.length)throw new Error("Unknown ledger fields: "+unknown.join(", "));
     const now=new Date(),id=Utilities.getUuid(),data=Object.assign({},record);
-    const idField=ERP_KEYS[table]||({InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id"})[table];
+    const idField=ERP_KEYS[table]||({InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id",ProduceLotMovements:"produce_lot_movement_id"})[table];
     data[idField]=id;if(!data.created_at)data.created_at=now;
     if(headers.indexOf("recorded_by")>=0&&!data.recorded_by)data.recorded_by=erpActor_();
     if(headers.indexOf("idempotency_key")>=0)data.idempotency_key=idempotencyKey;
