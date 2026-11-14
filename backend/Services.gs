@@ -288,6 +288,30 @@ function erpValidateRelations_(record){
   });
 }
 
+const ERP_CALCULATED_FIELDS = Object.freeze({
+  ProcurementLines:["quantity_received"],
+  SalesOrderLines:["quantity_fulfilled"],
+  ProduceLots:["quantity_available"]
+});
+
+function erpSetCalculatedField_(table,id,field,value,reason){
+  if(!(ERP_CALCULATED_FIELDS[table]||[]).includes(field))throw new Error("Unsupported calculated field.");
+  return erpWithLock_(()=>{
+    const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
+    if(!sh||sh.getLastRow()<2)throw new Error("Source record not found.");
+    const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+    const key=ERP_KEYS[table],keyCol=headers.indexOf(key)+1,fieldCol=headers.indexOf(field)+1;
+    if(!keyCol||!fieldCol)throw new Error("Calculated field schema is unavailable.");
+    const ids=sh.getRange(2,keyCol,sh.getLastRow()-1,1).getDisplayValues().flat();
+    const offset=ids.indexOf(String(id));if(offset<0)throw new Error("Source record not found.");
+    const row=offset+2,previous=sh.getRange(row,fieldCol).getValue();
+    if(Number(previous)===Number(value))return {ok:true,changed:false,value:previous};
+    sh.getRange(row,fieldCol).setValue(value);
+    erpAudit_(table,id,"calculated_update",{[field]:previous},{[field]:value,reason:reason||"Reconciled from source transactions"});
+    return {ok:true,changed:true,value:value};
+  });
+}
+
 function erpValidateRecord_(table,record,id){
   (ERP_REQUIRED[table]||[]).forEach(field=>{
     if(record[field]===undefined||record[field]===null||String(record[field]).trim()===""){
@@ -339,6 +363,13 @@ function erpSave(table,record){
     const old=isUpdate?sh.getRange(rowNum,1,1,headers.length).getValues()[0]:new Array(headers.length).fill("");
     const before=erpObject_(headers,old);
     const merged=Object.assign({},before,record);
+    (ERP_CALCULATED_FIELDS[table]||[]).forEach(field=>{
+      if(!Object.prototype.hasOwnProperty.call(record,field))return;
+      if(isUpdate&&String(record[field])!==String(before[field]??""))
+        throw new Error(field+" is calculated from source transactions and cannot be edited directly.");
+      if(!isUpdate&&Number(record[field]||0)!==0)
+        throw new Error(field+" must start at zero and is updated by the transaction workflow.");
+    });
     erpValidateRecord_(table,merged,id);
     const now=new Date();
     const values=headers.map((h,i)=>{
