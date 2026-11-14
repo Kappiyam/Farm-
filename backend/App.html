@@ -177,12 +177,14 @@
     const cards=rows.map(task=>{
       const next=(state.taskBoard.transitions[col.status]||[]).map(status=>'<option value="'+esc(status)+'">'+esc(status.replace(/_/g," "))+'</option>').join("");
       const assignees=(task.assignees||[]).map(a=>a.name).join(", ");
-      return '<article class="task-card"><div class="task-card-top"><span class="status '+statusClass(task.priority)+'">'+esc(task.priority||"normal")+'</span><span class="task-due">'+esc(task.due_at||"No due date")+'</span></div><strong>'+esc(task.title)+'</strong><div class="task-meta">'+esc(task.plot_id||task.field_id||"Farm-wide")+(assignees?" · "+esc(assignees):task.assigned_team?" · "+esc(task.assigned_team):" · Unassigned")+'</div><div class="task-card-footer"><span class="status '+statusClass(col.status)+'">'+esc(col.status.replace(/_/g," "))+'</span><select data-task-status="'+esc(task.task_id)+'"><option value="">Move to…</option>'+next+'</select></div></article>';
+      return '<article class="task-card"><div class="task-card-top"><span class="status '+statusClass(task.priority)+'">'+esc(task.priority||"normal")+'</span><span class="task-due">'+esc(task.due_at||"No due date")+'</span></div><strong>'+esc(task.title)+'</strong><div class="task-meta">'+esc(task.plot_id||task.field_id||"Farm-wide")+(assignees?" · "+esc(assignees):task.assigned_team?" · "+esc(task.assigned_team):" · Unassigned")+'</div><div class="task-card-footer"><span class="status '+statusClass(col.status)+'">'+esc(col.status.replace(/_/g," "))+'</span><select data-task-status="'+esc(task.task_id)+'"><option value="">Move to…</option>'+next+'</select></div><div class="task-card-actions"><button class="mini-btn" data-board-assign="'+esc(task.task_id)+'">Assign</button><button class="mini-btn" data-board-execute="'+esc(task.task_id)+'">Log actuals</button></div></article>';
     }).join("");
     return '<section class="task-column"><div class="task-column-head"><strong>'+esc(col.status.replace(/_/g," "))+'</strong><span>'+rows.length+'</span></div><div class="task-column-body">'+(cards||'<div class="task-empty">No tasks</div>')+'</div></section>';
   }).join("");
   $("#task-board").innerHTML=html||'<div class="empty">No task statuses found.</div>';
   $("#record-count").textContent=state.taskBoard.total+" tasks";
+  $("#task-board").querySelectorAll("[data-board-assign]").forEach(b=>b.onclick=()=>openTaskAssignmentDialog(b.dataset.boardAssign));
+  $("#task-board").querySelectorAll("[data-board-execute]").forEach(b=>b.onclick=()=>openTaskExecutionDialog(b.dataset.boardExecute));
   $("#task-board").querySelectorAll("[data-task-status]").forEach(select=>select.onchange=async()=>{
     const value=select.value;if(!value)return;
     select.disabled=true;
