@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const $ = s => document.querySelector(s);
-  const content = $("#app-content");
+  let content = $("#app-content");
   const state = {view:"dashboard",language:localStorage.getItem("farmerp-language")||"en",farm:"",records:{},search:"",demo:true};
   const modules = [
     ["dashboard","Dashboard","Overview","▦"],["calendar","Calendar & journal","Overview","▣"],
