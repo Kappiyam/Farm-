@@ -65,7 +65,7 @@ const ERP_TABLES = Object.freeze({
   FulfilmentLines: ["fulfilment_line_id","fulfilment_id","sales_line_id","produce_lot_id","quantity","unit","idempotency_key","created_at"],
   InvoiceLines: ["invoice_line_id","invoice_id","sales_line_id","product_id","description","quantity","unit","unit_price","line_total","created_at"],
   Dispatches: ["dispatch_id","fulfilment_id","dispatch_date","vehicle_reference","tracking_reference","received_by","status","notes","created_at"],
-  Invoices: ["invoice_id","farm_id","customer_id","sales_order_id","invoice_number","invoice_date","due_date","status","currency_code","subtotal","tax_amount","total_amount","created_at","updated_at"],
+  Invoices: ["invoice_id","farm_id","customer_id","sales_order_id","invoice_number","generation_key","invoice_date","due_date","status","currency_code","subtotal","tax_amount","total_amount","created_at","updated_at"],
   Payments: ["payment_id","farm_id","customer_id","invoice_id","payment_date","amount","currency_code","payment_method","account_id","reference_number","status","notes","recorded_by","idempotency_key","created_at"],
   SalesReturns: ["return_id","farm_id","sales_order_id","customer_id","return_date","reason","status","recorded_by","created_at"],
   SalesReturnLines: ["return_line_id","return_id","product_id","quantity","unit","disposition","produce_lot_id","notes"],
