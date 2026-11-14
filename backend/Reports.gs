@@ -73,7 +73,7 @@ function erpReport(name,filters){
       actualMinutes:rows.reduce((s,r)=>s+r.actual_minutes,0)};
     methodology="Task status and separate task-execution records. Completion status is not treated as measured output.";
   }else if(name==="workforce"){
-    const people=read("People"),attendance=read("Attendance").filter(a=>inRange(a.work_date)),execution=read("TaskExecution").filter(x=>inRange(x.started_at));
+    const people=erpRead_("People",{limit:1000}).rows,attendance=read("Attendance").filter(a=>inRange(a.work_date)),execution=read("TaskExecution").filter(x=>inRange(x.started_at));
     rows=people.map(p=>{
       const a=attendance.filter(x=>x.person_id===p.person_id),e=execution.filter(x=>x.person_id===p.person_id);
       return {person_id:p.person_id,person:p.display_name,attendance_days:a.length,
