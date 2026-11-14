@@ -57,7 +57,9 @@ function erpReceiveProcurement(procurementId,receipts){
       });
       lot=saved.record;
     }
-    const key="procurement:"+procurementId+":"+line.procurement_line_id+":"+lotCode+":"+qty;
+    const receiptReference=String(r.receipt_reference||"").trim();
+    if(!receiptReference)throw new Error("A stable receipt reference is required for safe retries.");
+    const key="procurement:"+procurementId+":"+receiptReference+":"+line.procurement_line_id+":"+lotCode;
     const prior=erpFindOne_("IdempotencyKeys",{idempotency_key:key});
     const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0));
     if(!prior&&qty>outstanding+0.000001)
