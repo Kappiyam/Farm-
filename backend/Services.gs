@@ -150,7 +150,8 @@ const ERP_REQUIRED = Object.freeze({
   CostAllocations:["finance_entry_id","farm_id","allocation_basis","allocated_amount"],Assets:["farm_id","asset_name"],
   AssetUsage:["asset_id","usage_date"],Maintenance:["asset_id","maintenance_type","scheduled_date"],
   CalendarEvents:["farm_id","title","start_at"],CalendarEventOverrides:["event_id","occurrence_start","action"],CalendarEventOccurrences:["event_id","occurrence_start","title"],ActivityJournal:["farm_id","occurred_at","title"],
-  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"],\n  EventParticipants:["event_id","person_id"]
+  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"],
+  EventParticipants:["event_id","person_id"]
 });
 
 const ERP_RELATIONS = Object.freeze({
@@ -174,7 +175,8 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
   InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
   Suppliers:["supplier_name","phone"],Products:["product_name","grade"],Invoices:["invoice_number"],
-  Tasks:["crop_cycle_id","template_id","due_at"],\n  CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
+  Tasks:["crop_cycle_id","template_id","due_at"],
+  CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
 });
 
 function erpEnsureSchema_() {
