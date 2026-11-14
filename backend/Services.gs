@@ -647,6 +647,18 @@ function erpUpdateTaskStatus(taskId,nextStatus,reason){
     if(old===next)return {ok:true,changed:false,status:next};
     if(!(ERP_TASK_TRANSITIONS[old]||[]).includes(next))
       throw new Error("Task status transition "+old+" → "+next+" is not permitted.");
+    if(["blocked","deferred","cancelled"].includes(next)&&!String(reason||"").trim())
+      throw new Error("A reason is required when blocking, deferring or cancelling a task.");
+    if(next==="assigned"){
+      const active=erpRead_("TaskAssignments",{limit:1000,filter:{task_id:String(taskId)}}).rows
+        .some(a=>!["cancelled","inactive","removed"].includes(String(a.status||"active").toLowerCase()));
+      if(!active&&!String(erpGetRecord_("Tasks",taskId).assigned_team||"").trim())
+        throw new Error("Assign at least one worker or team before moving this task to Assigned.");
+    }
+    if(next==="partially_completed"||next==="completed"){
+      const execution=erpRead_("TaskExecution",{limit:1000,filter:{task_id:String(taskId)}}).rows;
+      if(!execution.length)throw new Error("Record actual task execution before marking the task "+next.replace(/_/g," ")+".");
+    }
     sh.getRange(row,statusCol).setValue(next);if(updatedCol)sh.getRange(row,updatedCol).setValue(new Date());
     const history=ss.getSheetByName("TaskStatusHistory");
     const hh=history.getRange(1,1,1,history.getLastColumn()).getDisplayValues()[0];
