@@ -96,7 +96,7 @@ function erpCalApplyOverrides_(occurrences,overrides){
     if(String(override.action).toLowerCase()==="cancel")return null;
     let values={};
     try{values=JSON.parse(override.overrides_json||"{}");}catch(e){}
-    return Object.assign({},item,values,{override_id:override.override_id,has_override:true});
+    const updated=Object.assign({},item,values,{override_id:override.override_id,has_override:true});\n    if(values.start_at)updated.occurrence_start=erpCalKey_(values.start_at);\n    if(values.end_at)updated.occurrence_end=erpCalKey_(values.end_at);\n    return updated;
   }).filter(Boolean);
 }
 
@@ -165,6 +165,26 @@ function erpMaterialisePastCalendarOccurrences_(event){
     seen[key]=true;created++;
   });
   return {created:created};
+}
+
+function erpInsertCalendarEventUnlocked_(record){
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),sh=ss.getSheetByName("CalendarEvents");
+  if(!sh)throw new Error("Calendar event table is not installed.");
+  const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+  const data=Object.assign({},record);
+  delete data.event_id;
+  const unknown=Object.keys(data).filter(k=>headers.indexOf(k)<0);
+  if(unknown.length)throw new Error("Unsupported calendar fields: "+unknown.join(", "));
+  const required=ERP_REQUIRED.CalendarEvents||[];
+  const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
+  if(missing.length)throw new Error("Required calendar fields: "+missing.join(", "));
+  erpValidateRelations_(data);
+  const id=Utilities.getUuid(),now=new Date();
+  data.event_id=id;data.created_at=now;data.updated_at=now;
+  sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
+  const saved=erpObject_(headers,headers.map(h=>data[h]??""));
+  erpAudit_("CalendarEvents",id,"create_series_continuation",{},data);
+  return saved;
 }
 
 function erpUpdateCalendarEventRow_(eventId,changes,actionReason){
@@ -239,7 +259,7 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
     delete continuation.event_id;
     delete continuation.created_at;
     delete continuation.updated_at;
-    const saved=erpSave("CalendarEvents",continuation);
+    const saved=erpInsertCalendarEventUnlocked_(continuation);
     return {ok:true,scope:scope,originalEventId:eventId,continuation:saved.record,
       pastOccurrencesPreserved:true};
   });
