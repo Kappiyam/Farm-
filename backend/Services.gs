@@ -32,6 +32,7 @@ const ERP_TABLES = Object.freeze({
   CropCycleEvents: ["cycle_event_id","crop_cycle_id","event_type","event_date","stage","quantity","unit","description","recorded_by","created_at"],
   TaskTemplates: ["template_id","farm_id","crop_id","variety_id","template_name","task_type","trigger_type","trigger_offset_days","recurrence_rule","default_duration_minutes","default_priority","checklist_json","status","created_at","updated_at"],
   Tasks: ["task_id","farm_id","site_id","field_id","plot_id","crop_cycle_id","template_id","event_id","title","description","task_type","priority","status","planned_start","due_at","estimated_duration_minutes","assigned_team","created_by","created_at","updated_at"],
+  TaskStatusHistory: ["history_id","task_id","old_status","new_status","changed_at","changed_by","reason"],
   TaskAssignments: ["assignment_id","task_id","person_id","user_id","team_name","assignment_role","assigned_by","assigned_at","status"],
   TaskExecution: ["execution_id","task_id","person_id","contribution_percent","started_at","completed_at","duration_minutes","quantity","quantity_unit","area","area_unit","evidence_file_id","notes","exception_reason","review_status","reviewed_by","reviewed_at","recorded_by","idempotency_key","created_at"],
   People: ["person_id","display_name","phone","email","person_type","employment_type","preferred_language","skills","wage_basis","wage_rate","currency_code","joining_date","status","notes","created_at","updated_at"],
@@ -91,7 +92,7 @@ const ERP_KEYS = Object.freeze({
   Farms:"farm_id",Sites:"site_id",Fields:"field_id",Plots:"plot_id",Beds:"bed_id",Infrastructure:"infrastructure_id",
   Units:"unit_id",Crops:"crop_id",Varieties:"variety_id",CropProfiles:"crop_profile_id",PlantingCampaigns:"campaign_id",
   PlantingPlans:"planting_plan_id",CropCycles:"crop_cycle_id",CropCycleEvents:"cycle_event_id",TaskTemplates:"template_id",
-  Tasks:"task_id",TaskAssignments:"assignment_id",TaskExecution:"execution_id",People:"person_id",Attendance:"attendance_id",
+  Tasks:"task_id",TaskAssignments:"assignment_id",TaskStatusHistory:"history_id",TaskExecution:"execution_id",People:"person_id",Attendance:"attendance_id",
   WageTransactions:"wage_transaction_id",Observations:"observation_id",IrrigationRuns:"irrigation_run_id",
   IrrigationOperations:"irrigation_operation_id",Applications:"application_id",Suppliers:"supplier_id",
   InventoryItems:"item_id",ProcurementOrders:"procurement_id",ProcurementLines:"procurement_line_id",StockLots:"lot_id",
@@ -363,6 +364,8 @@ function erpSave(table,record){
     const old=isUpdate?sh.getRange(rowNum,1,1,headers.length).getValues()[0]:new Array(headers.length).fill("");
     const before=erpObject_(headers,old);
     const merged=Object.assign({},before,record);
+    if(table==="Tasks"&&isUpdate&&Object.prototype.hasOwnProperty.call(record,"status")&&String(record.status)!==String(before.status))
+      throw new Error("Task status must be changed through the task workflow so the transition history is retained.");
     (ERP_CALCULATED_FIELDS[table]||[]).forEach(field=>{
       if(!Object.prototype.hasOwnProperty.call(record,field))return;
       if(isUpdate&&String(record[field])!==String(before[field]??""))
@@ -522,6 +525,66 @@ function erpSignedStock_(type,q){
   if(["receipt","return_in","production_in","adjustment_in"].includes(t))return q;
   if(["issue","sale","wastage","quarantine_out","production_out","adjustment_out"].includes(t))return -q;
   return 0;
+}
+
+const ERP_TASK_TRANSITIONS = Object.freeze({
+  planned:["ready","assigned","deferred","cancelled"],
+  ready:["assigned","in_progress","blocked","deferred","cancelled"],
+  assigned:["in_progress","blocked","partially_completed","deferred","cancelled"],
+  in_progress:["blocked","partially_completed","completed","deferred","cancelled"],
+  blocked:["ready","assigned","in_progress","deferred","cancelled"],
+  partially_completed:["assigned","in_progress","blocked","completed","deferred","cancelled"],
+  deferred:["planned","ready","cancelled"],
+  completed:[],
+  cancelled:[]
+});
+
+function erpUpdateTaskStatus(taskId,nextStatus,reason){
+  const next=String(nextStatus||"").toLowerCase();
+  if(!Object.prototype.hasOwnProperty.call(ERP_TASK_TRANSITIONS,next))throw new Error("Unknown task status.");
+  return erpWithLock_(()=>{
+    const ss=SpreadsheetApp.getActiveSpreadsheet(),sh=ss.getSheetByName("Tasks");
+    const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+    const idCol=headers.indexOf("task_id")+1,statusCol=headers.indexOf("status")+1,updatedCol=headers.indexOf("updated_at")+1;
+    if(!idCol||!statusCol)throw new Error("Task status schema is unavailable.");
+    const ids=sh.getRange(2,idCol,Math.max(0,sh.getLastRow()-1),1).getDisplayValues().flat();
+    const index=ids.indexOf(String(taskId));if(index<0)throw new Error("Task not found.");
+    const row=index+2,old=String(sh.getRange(row,statusCol).getDisplayValue()||"planned").toLowerCase();
+    if(old===next)return {ok:true,changed:false,status:next};
+    if(!(ERP_TASK_TRANSITIONS[old]||[]).includes(next))
+      throw new Error("Task status transition "+old+" → "+next+" is not permitted.");
+    sh.getRange(row,statusCol).setValue(next);if(updatedCol)sh.getRange(row,updatedCol).setValue(new Date());
+    const history=ss.getSheetByName("TaskStatusHistory");
+    const hh=history.getRange(1,1,1,history.getLastColumn()).getDisplayValues()[0];
+    const item={history_id:Utilities.getUuid(),task_id:taskId,old_status:old,new_status:next,
+      changed_at:new Date(),changed_by:erpActor_(),reason:reason||""};
+    history.appendRow(hh.map(h=>Object.prototype.hasOwnProperty.call(item,h)?item[h]:""));
+    erpAudit_("Tasks",taskId,"status_transition",{status:old},{status:next,reason:reason||""});
+    return {ok:true,changed:true,oldStatus:old,status:next};
+  });
+}
+
+function erpGetTaskBoard(farmId){
+  const tasks=erpRead_("Tasks",{limit:1000,farmId:farmId}).rows;
+  const assignments=erpRead_("TaskAssignments",{limit:1000}).rows;
+  const people=erpRead_("People",{limit:1000}).rows;
+  const personById={};people.forEach(p=>personById[p.person_id]=p);
+  const assignmentsByTask={};
+  assignments.forEach(a=>{
+    if(!assignmentsByTask[a.task_id])assignmentsByTask[a.task_id]=[];
+    const person=personById[a.person_id]||{};
+    assignmentsByTask[a.task_id].push({person_id:a.person_id,name:person.display_name||person.email||a.team_name||"Assigned",status:a.status});
+  });
+  const columns=["planned","ready","assigned","in_progress","blocked","partially_completed","completed","deferred","cancelled"];
+  const board={};columns.forEach(c=>board[c]=[]);
+  tasks.forEach(task=>{
+    const status=String(task.status||"planned").toLowerCase();
+    if(!board[status])board[status]=[];
+    task.assignees=assignmentsByTask[task.task_id]||[];
+    board[status].push(task);
+  });
+  return {ok:true,columns:columns.map(status=>({status:status,count:(board[status]||[]).length,tasks:board[status]||[]})),
+    total:tasks.length,transitions:ERP_TASK_TRANSITIONS};
 }
 
 function erpGetDashboard(farmId){
