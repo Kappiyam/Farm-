@@ -144,7 +144,7 @@
   $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / '+esc(m.group.toUpperCase())+'</div><h2>'+esc(m.label)+'</h2><p>'+esc(m.desc)+'</p></div><span class="symbol">'+m.icon+'</span></section>'+extra+'<div class="tabs">'+tabs.map(x=>'<button class="tab '+(state.table===x[1]?"active":"")+'" data-table="'+esc(x[1])+'">'+esc(x[0])+'</button>').join("")+'</div><div class="toolbar"><div class="search"><span>⌕</span><input id="record-search" placeholder="'+t("search")+'" value="'+esc(state.search)+'"></div><div class="toolbar-right"><button class="btn secondary" id="export-btn">↓ '+t("export")+'</button><button class="btn primary" id="new-btn">＋ '+t("new")+'</button></div></div><article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+esc(tabs.find(x=>x[1]===state.table)[0])+'</h3><p id="record-count">Loading records…</p></div><span class="tag">'+(ledgerTables.has(state.table)?"Append-only transaction":"Managed records")+'</span></div><div class="table-wrap" id="table-wrap"></div><div class="mobile-records" id="mobile-records"></div><div class="table-foot"><span id="page-info"></span><div><button class="btn ghost" id="prev-page">Previous</button><button class="btn ghost" id="next-page">Next</button></div></div></article>';
   $("#content").querySelectorAll("[data-table]").forEach(b=>b.onclick=()=>{state.table=b.dataset.table;state.offset=0;state.search="";loadModule(state.view);});
   $("#record-search").onkeydown=e=>{if(e.key==="Enter"){state.search=e.target.value;state.offset=0;fetchRows();}};
-  $("#new-btn").disabled=!state.schema.keys[state.table]&&!ledgerTables.has(state.table);$("#new-btn").onclick=()=>openRecord(state.table,null);
+  $("#new-btn").disabled=(!state.schema.keys[state.table]&&!ledgerTables.has(state.table))||workflowManagedTables.has(state.table);$("#new-btn").onclick=()=>openRecord(state.table,null);
   $("#export-btn").onclick=exportCsv;
   $("#prev-page").onclick=()=>{state.offset=Math.max(0,state.offset-state.limit);fetchRows();};
   $("#next-page").onclick=()=>{if(state.offset+state.limit<state.total){state.offset+=state.limit;fetchRows();}};
@@ -397,14 +397,14 @@
  }
  async function openRecord(table,row){
   const key=state.schema.keys[table],headers=state.schema.tables[table]||[];
-  if(!key){toast("This record type is read-only.",true);return;}
+  if(!key||workflowManagedTables.has(table)){toast("This record type is managed by a workflow and is read-only here.",true);return;}
   const isLedger=ledgerTables.has(table);
   if(row&&isLedger){toast("Posted transactions are corrected by reversal or adjustment, not edited.",true);return;}
   const modal=document.createElement("dialog");modal.innerHTML='<form class="dialog-body" id="entry-form"><div class="dialog-head"><div><p>FARMERP / '+esc(table.toUpperCase())+'</p><h2>'+(row?"Edit ":"Create ")+esc(table.replace(/([A-Z])/g," $1").trim())+'</h2></div><button type="button" class="icon-btn" id="modal-close">×</button></div><div class="form-grid" id="dynamic-fields"><div class="loading">Preparing form…</div></div><div class="dialog-actions"><button type="button" class="btn secondary" id="cancel-entry">'+t("cancel")+'</button><button type="submit" class="btn primary" id="save-entry">'+t("save")+'</button></div></form>';
   document.body.append(modal);modal.showModal();
   const close=()=>modal.close();$("#modal-close",modal).onclick=close;$("#cancel-entry",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
   const required=new Set(state.schema.required[table]||[]),technical=new Set([key,"created_at","updated_at","created_by","recorded_by","assigned_by","reviewed_by","uploaded_by","actor_user_id","idempotency_key","pin_hash"]);
-  const fields=headers.filter(h=>!technical.has(h));
+  const fields=headers.filter(h=>!technical.has(h)&&!(hiddenCalculatedFields[table]||[]).includes(h));
   const lookups={};for(const h of fields){const typ=inferType(h);if(typ==="lookup"){const lt=lookupMap[h];try{lookups[h]=await lookupOptions(lt);}catch(e){lookups[h]=[];}}}
   const html=fields.map(h=>{
    const typ=inferType(h),val=row?row[h]??"": "",req=required.has(h),label=labelField(h);
