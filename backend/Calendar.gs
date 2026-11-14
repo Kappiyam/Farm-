@@ -96,7 +96,10 @@ function erpCalApplyOverrides_(occurrences,overrides){
     if(String(override.action).toLowerCase()==="cancel")return null;
     let values={};
     try{values=JSON.parse(override.overrides_json||"{}");}catch(e){}
-    const updated=Object.assign({},item,values,{override_id:override.override_id,has_override:true});\n    if(values.start_at)updated.occurrence_start=erpCalKey_(values.start_at);\n    if(values.end_at)updated.occurrence_end=erpCalKey_(values.end_at);\n    return updated;
+    const updated=Object.assign({},item,values,{override_id:override.override_id,has_override:true});
+    if(values.start_at)updated.occurrence_start=erpCalKey_(values.start_at);
+    if(values.end_at)updated.occurrence_end=erpCalKey_(values.end_at);
+    return updated;
   }).filter(Boolean);
 }
 
