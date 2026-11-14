@@ -141,7 +141,7 @@
   $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / '+esc(m.group.toUpperCase())+'</div><h2>'+esc(m.label)+'</h2><p>'+esc(m.desc)+'</p></div><span class="symbol">'+m.icon+'</span></section><div class="tabs">'+tabs.map(x=>'<button class="tab '+(state.table===x[1]?"active":"")+'" data-table="'+esc(x[1])+'">'+esc(x[0])+'</button>').join("")+'</div><div class="toolbar"><div class="search"><span>⌕</span><input id="record-search" placeholder="'+t("search")+'" value="'+esc(state.search)+'"></div><div class="toolbar-right"><button class="btn secondary" id="export-btn">↓ '+t("export")+'</button><button class="btn primary" id="new-btn">＋ '+t("new")+'</button></div></div><article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+esc(tabs.find(x=>x[1]===state.table)[0])+'</h3><p id="record-count">Loading records…</p></div><span class="tag">'+(ledgerTables.has(state.table)?"Append-only transaction":"Managed records")+'</span></div><div class="table-wrap" id="table-wrap"></div><div class="mobile-records" id="mobile-records"></div><div class="table-foot"><span id="page-info"></span><div><button class="btn ghost" id="prev-page">Previous</button><button class="btn ghost" id="next-page">Next</button></div></div></article>';
   $("#content").querySelectorAll("[data-table]").forEach(b=>b.onclick=()=>{state.table=b.dataset.table;state.offset=0;state.search="";loadModule(state.view);});
   $("#record-search").onkeydown=e=>{if(e.key==="Enter"){state.search=e.target.value;state.offset=0;fetchRows();}};
-  $("#new-btn").onclick=()=>openRecord(state.table,null);
+  $("#new-btn").disabled=!state.schema.keys[state.table]&&!ledgerTables.has(state.table);$("#new-btn").onclick=()=>openRecord(state.table,null);
   $("#export-btn").onclick=exportCsv;
   $("#prev-page").onclick=()=>{state.offset=Math.max(0,state.offset-state.limit);fetchRows();};
   $("#next-page").onclick=()=>{if(state.offset+state.limit<state.total){state.offset+=state.limit;fetchRows();}};
@@ -160,7 +160,7 @@
   call("erpList",state.table,options).then(data=>{state.rows=data.rows||[];state.total=data.total||0;renderRows();})
    .catch(e=>{$("#table-wrap").innerHTML='<div class="error">'+esc(e.message)+'</div>';});
  }
- function labelField(k){if(labelMap[k])return labelMap[k];return k.replace(/_id$/,"").replace(/_/g," ").replace(/w/g,c=>c.toUpperCase());}
+ function labelField(k){if(labelMap[k])return labelMap[k];return k.replace(/_id$/,"").split("_").map(w=>w?w[0].toUpperCase()+w.slice(1):"").join(" ");}
  function statusClass(v){const s=String(v||"").toLowerCase().replace(/\s/g,"-");return ["active","completed","received"].includes(s)?"active":["blocked","overdue","action-required"].includes(s)?"blocked":["planned","pending","assigned"].includes(s)?"planned":"";}
  function renderRows(){
   const cols=displayColumns(state.table),key=state.schema.keys[state.table];
@@ -168,8 +168,10 @@
   $("#page-info").textContent=state.total?("Showing "+(state.offset+1)+"–"+Math.min(state.offset+state.rows.length,state.total)+" of "+state.total):"0 records";
   $("#prev-page").disabled=state.offset===0;$("#next-page").disabled=state.offset+state.limit>=state.total;
   if(!state.rows.length){const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';$("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;}
-  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+'<th>Actions</th></tr></thead><tbody>'+state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+'<td><div class="row-actions"><button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button><button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button></div></td></tr>').join("")+'</tbody></table>';
-  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key])+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+'</dl><div class="record-card-actions"><button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button><button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button></div></article>').join("");
+  const canEdit=!!key&&!ledgerTables.has(state.table),canArchive=(state.schema.archivable||[]).includes(state.table);
+  const actionsHead=(canEdit||canArchive)?'<th>Actions</th>':'';
+  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+actionsHead+'</tr></thead><tbody>'+state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+((canEdit||canArchive)?'<td><div class="row-actions">'+(canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+(canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+'</div></td>':"")+'</tr>').join("")+'</tbody></table>';
+  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key]||"Record")+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+'</dl>'+((canEdit||canArchive)?'<div class="record-card-actions">'+(canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+(canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+'</div>':"")+'</article>').join("");
   $("#content").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openRecord(state.table,state.rows.find(r=>String(r[key])===b.dataset.edit)));
   $("#content").querySelectorAll("[data-archive]").forEach(b=>b.onclick=()=>archiveRecord(b.dataset.archive));
  }
