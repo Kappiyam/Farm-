@@ -51,16 +51,23 @@
     pageTitle.textContent = view === "farm-setup" ? "Farm setup" : "Overview";
     if (view === "farm-setup") {
       content.innerHTML = `
-        <section class="welcome"><h2>Farm configuration profile</h2>
-          <p>This is a preview of the native application shell. The farm identity, locale, timezone, measurement units and operating defaults will be configured here in the next milestone.</p>
+        <section class="welcome"><h2>Initial farm configuration</h2>
+          <p>Review the proposed Kappiyam organisation and first farm. This screen is read-only; it does not create or change database records.</p>
         </section>
-        <section class="panel"><h3>Configuration sections</h3>
-          <div class="steps">
-            <div class="step"><b class="step-no">1</b><div><strong>Farm identity</strong><span>Farm name, code and contact details</span></div></div>
-            <div class="step"><b class="step-no">2</b><div><strong>Locale and units</strong><span>Country, timezone, language, currency and measurement units</span></div></div>
-            <div class="step"><b class="step-no">3</b><div><strong>Operational defaults</strong><span>Calendar, crop and task defaults</span></div></div>
-          </div>
-        </section>`;
+        <section class="panel">
+          <div class="panel-head"><h3>Configuration preview</h3><span class="tag">Read only</span></div>
+          <div id="setup-status" class="connection">Loading configuration preview…</div>
+          <div id="setup-details" class="steps"></div>
+        </section>
+        <div class="notice">No organisation or farm record is created until the owner explicitly approves a separate setup action.</div>`;
+      google.script.run
+        .withSuccessHandler(showSetupPreview)
+        .withFailureHandler(error => {
+          const status = document.getElementById("setup-status");
+          status.className = "connection bad";
+          status.textContent = "Preview failed · " + (error && error.message ? error.message : error);
+        })
+        .previewInitialOrganisationSetup();
       return;
     }
     content.innerHTML = `
@@ -84,6 +91,41 @@
         </section>
       </div>
       <div class="notice">Preview only. Authentication and farm records are not enabled in this prototype.</div>`;
+  }
+
+  function showSetupPreview(result) {
+    const status = document.getElementById("setup-status");
+    const details = document.getElementById("setup-details");
+    if (!result || !result.ok) {
+      status.className = "connection bad";
+      status.textContent = "The server did not return a valid setup preview.";
+      return;
+    }
+    const org = result.proposedOrganization;
+    const farm = result.proposedFarm;
+    const orgExists = result.organizationCodeExists;
+    const farmExists = result.farmCodeExists;
+    status.className = "connection" + (orgExists || farmExists ? " bad" : " good");
+    status.textContent = "Schema " + result.schemaVersion + " · " +
+      (orgExists ? "Organisation code already exists" : "Organisation code available") + " · " +
+      (farmExists ? "Farm code already exists" : "Farm code available");
+    const rows = [
+      ["Organisation", org.name + " (" + org.code + ")"],
+      ["Country / timezone", org.countryCode + " · " + org.timezone],
+      ["Language / currency", org.defaultLanguage + " · " + org.currencyCode],
+      ["Farm", farm.name + " (" + farm.code + ")"],
+      ["Address", farm.address],
+      ["Area unit", farm.areaUnit]
+    ];
+    details.innerHTML = rows.map(([label, value]) =>
+      '<div class="step"><b class="step-no">✓</b><div><strong>' + escapeHtml(label) +
+      '</strong><span>' + escapeHtml(value) + '</span></div></div>').join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[character]);
   }
 
   function checkConnection() {
