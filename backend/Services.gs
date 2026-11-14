@@ -149,7 +149,10 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   Farms:["farm_code"],Sites:["farm_id","site_code"],Fields:["farm_id","field_code"],
   Plots:["field_id","plot_code"],Beds:["plot_id","bed_code"],Crops:["crop_name"],
   Varieties:["crop_id","variety_name"],Users:["email"],InventoryItems:["item_code"],
-  Customers:["customer_name","phone"],Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
+  StockLots:["item_id","lot_code"],ProduceLots:["farm_id","lot_code"],
+  Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
+  InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
+  Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
   Tasks:["crop_cycle_id","template_id","due_at"]
 });
 
