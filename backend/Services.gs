@@ -252,7 +252,7 @@ function erpSave(table,record){
 }
 
 function erpArchive(table,id,reason){
-  if(!ERP_KEYS[table])throw new Error("Unsupported master record.");
+  if(!ERP_ARCHIVABLE.has(table))throw new Error("This record type must be corrected or cancelled through its own workflow, not archived.");
   const data=erpList(table,{limit:1000,filter:{[ERP_KEYS[table]]:id}});
   if(!data.rows.length)throw new Error("Record not found.");
   const record=data.rows[0];
