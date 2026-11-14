@@ -94,7 +94,7 @@
  };
  const t=k=>(i18n[state.language]||i18n.en)[k]||(i18n.en[k]||k);
  function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
- function call(name,...args){return new Promise((resolve,reject)=>{if(!google||!google.script||!google.script.run)return reject(new Error("Open FarmERP through its Apps Script web app URL to connect the database."));google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(new Error(e&&e.message?e.message:String(e))))[name](...args);});}
+ function call(name,...args){return new Promise((resolve,reject)=>{if(typeof google==="undefined"||!google.script||!google.script.run)return reject(new Error("Open FarmERP through its Apps Script web app URL to connect the database."));google.script.run.withSuccessHandler(resolve).withFailureHandler(e=>reject(new Error(e&&e.message?e.message:String(e))))[name](...args);});}
  function toast(msg,error){const root=$("#toast-root");root.innerHTML='<div class="toast '+(error?"error":"")+'">'+esc(msg)+'</div>';setTimeout(()=>root.innerHTML="",4000);}
  function title(key){return modules.find(m=>m.key===key)||modules[0];}
  function renderNav(){
@@ -161,7 +161,7 @@
    .catch(e=>{$("#table-wrap").innerHTML='<div class="error">'+esc(e.message)+'</div>';});
  }
  function labelField(k){if(labelMap[k])return labelMap[k];return k.replace(/_id$/,"").replace(/_/g," ").replace(/w/g,c=>c.toUpperCase());}
- function statusClass(v){const s=String(v||"").toLowerCase().replace(/s/g,"-");return ["active","completed","received"].includes(s)?"active":["blocked","overdue","action-required"].includes(s)?"blocked":["planned","pending","assigned"].includes(s)?"planned":"";}
+ function statusClass(v){const s=String(v||"").toLowerCase().replace(/\s/g,"-");return ["active","completed","received"].includes(s)?"active":["blocked","overdue","action-required"].includes(s)?"blocked":["planned","pending","assigned"].includes(s)?"planned":"";}
  function renderRows(){
   const cols=displayColumns(state.table),key=state.schema.keys[state.table];
   $("#record-count").textContent=state.total+" records";
@@ -203,7 +203,7 @@
   const modal=document.createElement("dialog");modal.innerHTML='<form class="dialog-body" id="entry-form"><div class="dialog-head"><div><p>FARMERP / '+esc(table.toUpperCase())+'</p><h2>'+(row?"Edit ":"Create ")+esc(table.replace(/([A-Z])/g," $1").trim())+'</h2></div><button type="button" class="icon-btn" id="modal-close">×</button></div><div class="form-grid" id="dynamic-fields"><div class="loading">Preparing form…</div></div><div class="dialog-actions"><button type="button" class="btn secondary" id="cancel-entry">'+t("cancel")+'</button><button type="submit" class="btn primary" id="save-entry">'+t("save")+'</button></div></form>';
   document.body.append(modal);modal.showModal();
   const close=()=>modal.close();$("#modal-close",modal).onclick=close;$("#cancel-entry",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
-  const required=new Set(state.schema.required[table]||[]),technical=new Set([key,"created_at","updated_at","created_by","recorded_by","assigned_by","reviewed_by","uploaded_by","actor_user_id","idempotency_key"]);
+  const required=new Set(state.schema.required[table]||[]),technical=new Set([key,"created_at","updated_at","created_by","recorded_by","assigned_by","reviewed_by","uploaded_by","actor_user_id","idempotency_key","pin_hash"]);
   const fields=headers.filter(h=>!technical.has(h));
   const lookups={};for(const h of fields){const typ=inferType(h);if(typ==="lookup"){const lt=lookupMap[h];try{lookups[h]=await lookupOptions(lt);}catch(e){lookups[h]=[];}}}
   const html=fields.map(h=>{
