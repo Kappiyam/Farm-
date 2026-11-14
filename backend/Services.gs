@@ -76,6 +76,8 @@ const ERP_TABLES = Object.freeze({
   AssetUsage: ["asset_usage_id","asset_id","usage_date","person_id","crop_cycle_id","task_id","hours_used","fuel_quantity","fuel_unit","notes","recorded_by","created_at"],
   Maintenance: ["maintenance_id","asset_id","maintenance_type","scheduled_date","completed_date","cost","currency_code","downtime_hours","service_provider","parts_json","notes","status","created_at"],
   CalendarEvents: ["event_id","farm_id","title","event_type","start_at","end_at","all_day","site_id","field_id","description","recurrence_type","recurrence_interval","recurrence_end","occurrence_limit","series_id","status","created_by","created_at","updated_at"],
+  CalendarEventOverrides: ["override_id","event_id","occurrence_start","action","overrides_json","reason","created_by","created_at","updated_at"],
+  CalendarEventOccurrences: ["occurrence_id","event_id","series_id","occurrence_start","occurrence_end","title","event_type","site_id","field_id","description","all_day","status","snapshot_json","created_at"],
   EventParticipants: ["participant_id","event_id","person_id","user_id","attendance_status","created_at","updated_at"],
   ActivityJournal: ["journal_id","farm_id","occurred_at","category","title","description","author_id","linked_entity_type","linked_entity_id","evidence_file_id","created_at"],
   Attachments: ["attachment_id","farm_id","entity_type","entity_id","drive_file_id","file_name","mime_type","uploaded_by","created_at"],
@@ -102,7 +104,7 @@ const ERP_KEYS = Object.freeze({
   Fulfilments:"fulfilment_id",FulfilmentLines:"fulfilment_line_id",InvoiceLines:"invoice_line_id",Dispatches:"dispatch_id",Invoices:"invoice_id",
   Payments:"payment_id",SalesReturns:"return_id",SalesReturnLines:"return_line_id",FinanceEntries:"finance_entry_id",
   PaymentAccounts:"account_id",CostAllocations:"allocation_id",Assets:"asset_id",AssetUsage:"asset_usage_id",
-  Maintenance:"maintenance_id",CalendarEvents:"event_id",EventParticipants:"participant_id",ActivityJournal:"journal_id",
+  Maintenance:"maintenance_id",CalendarEvents:"event_id",CalendarEventOverrides:"override_id",CalendarEventOccurrences:"occurrence_id",EventParticipants:"participant_id",ActivityJournal:"journal_id",
   Attachments:"attachment_id",Notifications:"notification_id",DemandRecords:"demand_id",ForecastVersions:"forecast_version_id",
   SavedViews:"saved_view_id"
 });
@@ -147,7 +149,7 @@ const ERP_REQUIRED = Object.freeze({
   Invoices:["farm_id","customer_id","invoice_number","invoice_date","total_amount"],PaymentAccounts:["farm_id","account_name"],
   CostAllocations:["finance_entry_id","farm_id","allocation_basis","allocated_amount"],Assets:["farm_id","asset_name"],
   AssetUsage:["asset_id","usage_date"],Maintenance:["asset_id","maintenance_type","scheduled_date"],
-  CalendarEvents:["farm_id","title","start_at"],ActivityJournal:["farm_id","occurred_at","title"],
+  CalendarEvents:["farm_id","title","start_at"],CalendarEventOverrides:["event_id","occurrence_start","action"],CalendarEventOccurrences:["event_id","occurrence_start","title"],ActivityJournal:["farm_id","occurred_at","title"],
   DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"]
 });
 
@@ -155,7 +157,7 @@ const ERP_RELATIONS = Object.freeze({
   organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",source_plot_id:"Plots",source_cycle_id:"CropCycles",bed_id:"Beds",
   crop_id:"Crops",variety_id:"Varieties",crop_profile_id:"CropProfiles",campaign_id:"PlantingCampaigns",
   crop_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",template_id:"TaskTemplates",event_id:"CalendarEvents",
-  task_id:"Tasks",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
+  task_id:"Tasks",event_id:"CalendarEvents",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
   resulting_task_id:"Tasks",team_leader_id:"People",item_id:"InventoryItems",product_item_id:"InventoryItems",lot_id:"StockLots",
   source_lot_id:"StockLots",supplier_id:"Suppliers",customer_id:"Customers",product_id:"Products",
   price_list_id:"PriceLists",sales_order_id:"SalesOrders",sales_line_id:"SalesOrderLines",produce_lot_id:"ProduceLots",
