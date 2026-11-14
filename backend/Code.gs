@@ -368,7 +368,7 @@ function previewInitialOrganisationSetup() {
       .some(function(row) { return String(row[0]).trim().toUpperCase() === code; });
   }
 
-  return {
+  const preview = {
     ok: true,
     readOnly: true,
     appVersion: APP_VERSION,
@@ -391,4 +391,6 @@ function previewInitialOrganisationSetup() {
     farmCodeExists: hasCode("Farms", "farm_code", "MADAMPATTI"),
     missingTabs: missingTabs
   };
+  console.log(JSON.stringify(preview));
+  return preview;
 }
