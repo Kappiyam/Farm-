@@ -169,38 +169,46 @@
   $("#record-count").textContent=state.total+" records";
   $("#page-info").textContent=state.total?("Showing "+(state.offset+1)+"–"+Math.min(state.offset+state.rows.length,state.total)+" of "+state.total):"0 records";
   $("#prev-page").disabled=state.offset===0;$("#next-page").disabled=state.offset+state.rows.length>=state.total;
-  if(!state.rows.length){
-    const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';
-    $("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;
-  }
-  const canEdit=!!key&&!ledgerTables.has(state.table);
-  const canArchive=(state.schema.archivable||[]).includes(state.table);
+  if(!state.rows.length){const empty='<div class="empty"><div class="empty-icon">▦</div><strong>'+t("empty")+'</strong><span>'+t("emptyHint")+'</span></div>';$("#table-wrap").innerHTML=empty;$("#mobile-records").innerHTML=empty;return;}
+  const canEdit=!!key&&!ledgerTables.has(state.table),canArchive=(state.schema.archivable||[]).includes(state.table);
   const canPlan=state.table==="CropCycles",canFollow=state.table==="Observations";
-  const hasActions=canEdit||canArchive||canPlan||canFollow;
+  const canReceive=state.table==="ProcurementOrders",canHarvest=state.table==="HarvestSessions",canFulfil=state.table==="SalesOrders";
+  const hasActions=canEdit||canArchive||canPlan||canFollow||canReceive||canHarvest||canFulfil;
   const actionHeader=hasActions?"<th>Actions</th>":"";
   function actionHtml(r){
     return hasActions?'<td><div class="row-actions">'+
       (canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+
       (canPlan?'<button class="mini-btn" data-plan-cycle="'+esc(r[key])+'">Plan tasks</button>':"")+
       (canFollow?'<button class="mini-btn" data-follow-up="'+esc(r[key])+'">Create task</button>':"")+
+      (canReceive?'<button class="mini-btn" data-receive="'+esc(r[key])+'">Receive stock</button>':"")+
+      (canHarvest?'<button class="mini-btn" data-finalize-harvest="'+esc(r[key])+'">Finalise harvest</button>':"")+
+      (canFulfil?'<button class="mini-btn" data-fulfil="'+esc(r[key])+'">Fulfil</button><button class="mini-btn" data-invoice="'+esc(r[key])+'">Create invoice</button>':"")+
       (canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+
       '</div></td>':"";
   }
-  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+actionHeader+'</tr></thead><tbody>'+
-    state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+actionHtml(r)+'</tr>').join("")+
-    '</tbody></table>';
-  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key]||"Record")+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+
-    cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+
-    '</dl>'+(hasActions?'<div class="record-card-actions">'+
+  function cardActions(r){
+    return hasActions?'<div class="record-card-actions">'+
       (canEdit?'<button class="mini-btn" data-edit="'+esc(r[key])+'">Edit</button>':"")+
       (canPlan?'<button class="mini-btn" data-plan-cycle="'+esc(r[key])+'">Plan tasks</button>':"")+
       (canFollow?'<button class="mini-btn" data-follow-up="'+esc(r[key])+'">Create task</button>':"")+
+      (canReceive?'<button class="mini-btn" data-receive="'+esc(r[key])+'">Receive</button>':"")+
+      (canHarvest?'<button class="mini-btn" data-finalize-harvest="'+esc(r[key])+'">Finalise harvest</button>':"")+
+      (canFulfil?'<button class="mini-btn" data-fulfil="'+esc(r[key])+'">Fulfil</button><button class="mini-btn" data-invoice="'+esc(r[key])+'">Invoice</button>':"")+
       (canArchive?'<button class="mini-btn" data-archive="'+esc(r[key])+'">Archive</button>':"")+
-      '</div>':"")+'</article>').join("");
+      '</div>':"";
+  }
+  $("#table-wrap").innerHTML='<table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+actionHeader+'</tr></thead><tbody>'+
+    state.rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(c==="status"?'<span class="status '+statusClass(r[c])+'">'+esc(r[c])+'</span>':esc(r[c]))+'</td>').join("")+actionHtml(r)+'</tr>').join("")+'</tbody></table>';
+  $("#mobile-records").innerHTML=state.rows.map(r=>'<article class="record-card"><div class="record-card-top"><strong>'+esc(r[cols[0]]||r[key]||"Record")+'</strong><span class="status '+statusClass(r.status)+'">'+esc(r.status||"")+'</span></div><dl>'+
+    cols.slice(1,5).map(c=>'<div><dt>'+esc(labelField(c))+'</dt><dd>'+esc(r[c])+'</dd></div>').join("")+'</dl>'+cardActions(r)+'</article>').join("");
   $("#content").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openRecord(state.table,state.rows.find(r=>String(r[key])===b.dataset.edit)));
   $("#content").querySelectorAll("[data-archive]").forEach(b=>b.onclick=()=>archiveRecord(b.dataset.archive));
   $("#content").querySelectorAll("[data-plan-cycle]").forEach(b=>b.onclick=()=>previewTaskPlan(b.dataset.planCycle));
   $("#content").querySelectorAll("[data-follow-up]").forEach(b=>b.onclick=()=>openObservationFollowUp(b.dataset.followUp));
+  $("#content").querySelectorAll("[data-receive]").forEach(b=>b.onclick=()=>openProcurementReceipt(b.dataset.receive));
+  $("#content").querySelectorAll("[data-finalize-harvest]").forEach(b=>b.onclick=()=>openHarvestFinalization(b.dataset.finalizeHarvest));
+  $("#content").querySelectorAll("[data-fulfil]").forEach(b=>b.onclick=()=>openOrderFulfilment(b.dataset.fulfil));
+  $("#content").querySelectorAll("[data-invoice]").forEach(b=>b.onclick=()=>createInvoice(b.dataset.invoice));
  }
  async function previewTaskPlan(cycleId){
   try{
