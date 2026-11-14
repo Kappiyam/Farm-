@@ -46,7 +46,7 @@ const ERP_TABLES = Object.freeze({
   InventoryItems: ["item_id","item_name","item_code","item_category","base_unit","reorder_level","reorder_unit","default_storage_location","valuation_method","status","created_at","updated_at"],
   ProcurementOrders: ["procurement_id","farm_id","supplier_id","document_number","order_date","expected_date","received_date","status","currency_code","subtotal","tax_amount","total_amount","notes","created_by","created_at","updated_at"],
   ProcurementLines: ["procurement_line_id","procurement_id","item_id","description","quantity_ordered","quantity_received","unit","unit_cost","currency_code","storage_location","lot_code","expiry_date"],
-  StockLots: ["lot_id","farm_id","item_id","lot_code","source_type","source_reference","received_date","expiry_date","storage_location","supplier_id","unit_cost","currency_code","status","created_at","updated_at"],
+  StockLots: ["lot_id","farm_id","item_id","lot_code","source_type","source_reference","received_date","expiry_date","quantity_available","storage_location","supplier_id","unit_cost","currency_code","status","created_at","updated_at"],
   InventoryTransactions: ["transaction_id","farm_id","item_id","lot_id","transaction_type","quantity","unit","unit_cost","transaction_at","from_location","to_location","reference_type","reference_id","idempotency_key","recorded_by","reason","created_at"],
   FarmMadeBatches: ["batch_id","farm_id","batch_name","batch_type","start_date","ready_date","quantity_produced","unit","status","method_notes","recorded_by","created_at","updated_at"],
   FarmMadeBatchInputs: ["batch_input_id","batch_id","item_id","source_lot_id","quantity_used","unit","created_at"],
@@ -562,8 +562,14 @@ function erpPostLedger(table,record,idempotencyKey){
     if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))
       throw new Error("Quantity must be greater than zero.");
     if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
-      const available=erpStockBalance(data.item_id,data.lot_id);
+      const available=erpStockBalance(data.item_id,data.lot_id,data.farm_id,data.from_location||"");
       if(available<Number(data.quantity))throw new Error("Insufficient available stock. Available: "+available);
+    }
+    if(table==="InventoryTransactions"&&String(data.transaction_type||"").toLowerCase()==="transfer"){
+      if(!data.from_location||!data.to_location||String(data.from_location)===String(data.to_location))
+        throw new Error("A stock transfer requires two different storage locations.");
+      const available=erpStockBalance(data.item_id,data.lot_id,data.farm_id,data.from_location);
+      if(available<Number(data.quantity))throw new Error("Insufficient stock at the source location. Available: "+available);
     }
     if(table==="ProduceLotMovements"&&["dispatch","sale","processing_out","internal_use","wastage","quarantine_out","adjustment_out"].includes(String(data.movement_type||"").toLowerCase())){
       const available=erpProduceLotBalance_(data.produce_lot_id);
@@ -578,14 +584,32 @@ function erpPostLedger(table,record,idempotencyKey){
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
     erpAudit_(table,id,"post",{},data);
     erpSetIdempotencyStatus_(keys,keyRow,{result_id:id,status:"complete",updated_at:new Date()});
-    if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);
+    if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);\n    if(table==="InventoryTransactions"&&data.lot_id)erpUpdateStockLotSnapshot_(data.lot_id);
     return {ok:true,duplicate:false,id:id};
   });
 }
 
-function erpStockBalance(itemId,lotId){
-  const rows=erpRead_("InventoryTransactions",{limit:1000}).rows.filter(r=>String(r.item_id)===String(itemId)&&(!lotId||String(r.lot_id)===String(lotId)));
-  return rows.reduce((sum,r)=>sum+erpSignedStock_(r.transaction_type,Number(r.quantity)||0),0);
+function erpStockBalance(itemId,lotId,farmId,locationId){
+  const rows=erpRead_("InventoryTransactions",{limit:1000}).rows.filter(r=>
+    String(r.item_id)===String(itemId)&&(!lotId||String(r.lot_id)===String(lotId))&&
+    (!farmId||String(r.farm_id)===String(farmId)));
+  return rows.reduce((sum,r)=>{
+    const type=String(r.transaction_type||"").toLowerCase(),q=Number(r.quantity)||0;
+    if(type==="transfer"){
+      if(!locationId)return sum;
+      if(String(r.from_location||"")===String(locationId))return sum-q;
+      if(String(r.to_location||"")===String(locationId))return sum+q;
+      return sum;
+    }
+    if(locationId){
+      const inbound=["receipt","return_in","production_in","adjustment_in"];
+      const outbound=["issue","sale","wastage","production_out","adjustment_out"];
+      if(inbound.includes(type))return String(r.to_location||"")===String(locationId)?sum+q:sum;
+      if(outbound.includes(type))return String(r.from_location||"")===String(locationId)?sum-q:sum;
+      return sum;
+    }
+    return sum+erpSignedStock_(type,q);
+  },0);
 }
 function erpSignedStock_(type,q){
   const t=String(type||"").toLowerCase();
