@@ -374,10 +374,11 @@ function erpSave(table,record,idempotencyKey){
     const keyCol=headers.indexOf(key)+1;
     if(!keyCol)throw new Error("Primary key column is missing: "+key);
     const keys=ss.getSheetByName("IdempotencyKeys");
-    let id=String(record[key]||""),idemRow=0,payloadHash="";
+    let id=String(record[key]||""),idemRow=0,payloadHash="",idemHeaders=null;
     if(idempotencyKey){
       if(!keys)throw new Error("Idempotency schema is not installed.");
       const kh=keys.getRange(1,1,1,keys.getLastColumn()).getDisplayValues()[0];
+      idemHeaders=kh;
       const idemCol=kh.indexOf("idempotency_key")+1;
       if(!idemCol)throw new Error("Idempotency key column is missing.");
       payloadHash=Utilities.base64Encode(Utilities.computeDigest(
@@ -403,12 +404,6 @@ function erpSave(table,record,idempotencyKey){
         }
       }else{
         id=id||Utilities.getUuid();
-        const now=new Date(),reservation={
-          idempotency_key:idempotencyKey,operation_type:"save:"+table,result_id:id,
-          status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now
-        };
-        keys.appendRow(kh.map(h=>Object.prototype.hasOwnProperty.call(reservation,h)?reservation[h]:""));
-        idemRow=keys.getLastRow();
       }
     }
     id=id||Utilities.getUuid();
@@ -429,6 +424,12 @@ function erpSave(table,record,idempotencyKey){
         throw new Error(field+" must start at zero and is updated by the transaction workflow.");
     });
     erpValidateRecord_(table,merged,id);
+    if(idempotencyKey&&!idemRow){
+      const now=new Date(),reservation={idempotency_key:idempotencyKey,operation_type:"save:"+table,result_id:id,
+        status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now};
+      keys.appendRow(idemHeaders.map(h=>Object.prototype.hasOwnProperty.call(reservation,h)?reservation[h]:""));
+      idemRow=keys.getLastRow();
+    }
     const now=new Date();
     const values=headers.map((h,index)=>{
       if(h===key)return id;
