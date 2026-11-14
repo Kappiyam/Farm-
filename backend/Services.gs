@@ -104,7 +104,7 @@ const ERP_KEYS = Object.freeze({
   SavedViews:"saved_view_id"
 });
 
-const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
+const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
   Farms:["farm_name","farm_code"],Sites:["farm_id","site_name"],Fields:["farm_id","field_name"],
   Plots:["farm_id","field_id","plot_name"],Crops:["crop_name"],Varieties:["crop_id","variety_name"],
   CropCycles:["farm_id","plot_id","crop_id","start_date"],Tasks:["farm_id","title"],
@@ -347,6 +347,16 @@ function erpGetDashboard(farmId){
     dueTasks:due.slice(0,10),overdueTasks:overdue.slice(0,10),actionObservations:action.slice(0,10),
     lowStock:lowStock.slice(0,10),recentOrders:pendingOrders.slice(-8).reverse()};
 }
+
+function erpGetSchema(){
+  return {ok:true,tables:ERP_TABLES,keys:ERP_KEYS,required:ERP_REQUIRED,ledgerRequired:ERP_LEDGER_REQUIRED};
+}
+
+const ERP_ARCHIVABLE = new Set([
+  "Users","Roles","Farms","Sites","Fields","Plots","Beds","Infrastructure","Units","Crops",
+  "Varieties","CropProfiles","People","Teams","Suppliers","InventoryItems","Customers",
+  "Products","PriceLists","Assets"
+]);
 
 function erpGetModuleData(table,options){return erpList(table,options);}
 function erpCsv(table){
