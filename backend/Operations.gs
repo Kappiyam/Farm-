@@ -72,7 +72,7 @@ function erpReceiveProcurement(procurementId,receipts){
       String(t.reference_type)==="ProcurementLine"&&String(t.reference_id)===String(line.procurement_line_id)&&
       ["receipt","return_in"].includes(String(t.transaction_type).toLowerCase()))
       .reduce((sum,t)=>sum+(Number(t.quantity)||0),0);
-    erpSave("ProcurementLines",{procurement_line_id:line.procurement_line_id,quantity_received:received});
+    erpSetCalculatedField_("ProcurementLines",line.procurement_line_id,"quantity_received",received,"Confirmed stock receipt ledger");
     results.push({procurement_line_id:line.procurement_line_id,lot_id:lot.lot_id,posted:posted,received_total:received,item_name:item.item_name});
   });
   const lines=erpRead_("ProcurementLines",{limit:1000,filter:{procurement_id:procurementId}}).rows;
@@ -183,7 +183,7 @@ function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate){
   orderLines.forEach(line=>{
     const fulfilled=erpRead_("FulfilmentLines",{limit:1000,filter:{sales_line_id:line.sales_line_id}}).rows
       .reduce((sum,x)=>sum+(Number(x.quantity)||0),0);
-    erpSave("SalesOrderLines",{sales_line_id:line.sales_line_id,quantity_fulfilled:fulfilled});
+    erpSetCalculatedField_("SalesOrderLines",line.sales_line_id,"quantity_fulfilled",fulfilled,"Fulfilment line reconciliation");
     if(fulfilled+0.000001<(Number(line.quantity_ordered)||0))complete=false;
   });
   const newStatus=complete?"fulfilled":"partially_fulfilled";
