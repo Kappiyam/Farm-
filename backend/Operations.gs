@@ -241,12 +241,15 @@ function erpCreateInvoiceFromOrder(orderId,dueDate){
   const inserted=[];
   pending.forEach(x=>{
     const existing=currentLines.find(l=>String(l.sales_line_id)===String(x.line.sales_line_id));
-    if(existing)return;
-    const saved=erpSave("InvoiceLines",{
+    const quantity=(existing?Number(existing.quantity)||0:0)+x.quantity;
+    const lineAmount=quantity*x.unitPrice;
+    const record={
       invoice_id:invoice.invoice_id,sales_line_id:x.line.sales_line_id,product_id:x.line.product_id,
-      description:x.line.description||"",quantity:x.quantity,unit:x.line.unit,
-      unit_price:x.unitPrice,line_total:x.amount
-    });
+      description:x.line.description||"",quantity:quantity,unit:x.line.unit,
+      unit_price:x.unitPrice,line_total:lineAmount
+    };
+    if(existing)record.invoice_line_id=existing.invoice_line_id;
+    const saved=erpSave("InvoiceLines",record);
     inserted.push(saved.id);
   });
   // Reconcile the draft header from its actual line records; safe after a partial retry.
