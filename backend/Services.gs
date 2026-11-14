@@ -33,13 +33,13 @@ const ERP_TABLES = Object.freeze({
   TaskTemplates: ["template_id","farm_id","crop_id","variety_id","template_name","task_type","trigger_type","trigger_offset_days","recurrence_rule","default_duration_minutes","default_priority","checklist_json","status","created_at","updated_at"],
   Tasks: ["task_id","farm_id","site_id","field_id","plot_id","crop_cycle_id","template_id","event_id","title","description","task_type","priority","status","planned_start","due_at","estimated_duration_minutes","assigned_team","created_by","created_at","updated_at"],
   TaskAssignments: ["assignment_id","task_id","person_id","user_id","team_name","assignment_role","assigned_by","assigned_at","status"],
-  TaskExecution: ["execution_id","task_id","person_id","contribution_percent","started_at","completed_at","duration_minutes","quantity","quantity_unit","area","area_unit","evidence_file_id","notes","exception_reason","review_status","reviewed_by","reviewed_at","recorded_by","created_at"],
+  TaskExecution: ["execution_id","task_id","person_id","contribution_percent","started_at","completed_at","duration_minutes","quantity","quantity_unit","area","area_unit","evidence_file_id","notes","exception_reason","review_status","reviewed_by","reviewed_at","recorded_by","idempotency_key","created_at"],
   People: ["person_id","display_name","phone","email","person_type","employment_type","preferred_language","skills","wage_basis","wage_rate","currency_code","joining_date","status","notes","created_at","updated_at"],
-  Attendance: ["attendance_id","farm_id","person_id","work_date","check_in","check_out","attendance_status","total_minutes","notes","recorded_by","created_at","updated_at"],
-  WageTransactions: ["wage_transaction_id","farm_id","person_id","transaction_type","transaction_date","period_start","period_end","amount","currency_code","reference_type","reference_id","status","notes","recorded_by","created_at"],
+  Attendance: ["attendance_id","farm_id","person_id","work_date","check_in","check_out","attendance_status","total_minutes","notes","recorded_by","idempotency_key","created_at","updated_at"],
+  WageTransactions: ["wage_transaction_id","farm_id","person_id","transaction_type","transaction_date","period_start","period_end","amount","currency_code","reference_type","reference_id","status","notes","recorded_by","idempotency_key","created_at"],
   Observations: ["observation_id","farm_id","field_id","plot_id","crop_cycle_id","observed_at","observer_id","category","severity","extent_value","extent_unit","quick_status","description","recommendation","resulting_task_id","evidence_file_id","recorded_by","created_at"],
   IrrigationRuns: ["irrigation_run_id","farm_id","site_id","water_source","pump_id","started_at","ended_at","duration_minutes","source_meter_start","source_meter_end","meter_unit","total_volume","volume_unit","recorded_by","notes","created_at"],
-  IrrigationOperations: ["irrigation_operation_id","irrigation_run_id","farm_id","field_id","plot_id","valve_code","started_at","ended_at","duration_minutes","estimated_volume","volume_unit","method","recorded_by","notes","created_at"],
+  IrrigationOperations: ["irrigation_operation_id","irrigation_run_id","farm_id","field_id","plot_id","valve_code","started_at","ended_at","duration_minutes","estimated_volume","volume_unit","method","recorded_by","idempotency_key","notes","created_at"],
   Applications: ["application_id","farm_id","field_id","plot_id","crop_cycle_id","application_type","applied_at","item_id","batch_id","dose_quantity","dose_unit","water_volume","water_unit","treated_area","area_unit","target","weather_notes","actual_consumption","consumption_unit","recorded_by","notes","created_at"],
   Suppliers: ["supplier_id","supplier_name","contact_name","phone","email","address","tax_reference","payment_terms","status","created_at","updated_at"],
   InventoryItems: ["item_id","item_name","item_code","item_category","base_unit","reorder_level","reorder_unit","default_storage_location","valuation_method","status","created_at","updated_at"],
@@ -50,7 +50,7 @@ const ERP_TABLES = Object.freeze({
   FarmMadeBatches: ["batch_id","farm_id","batch_name","batch_type","start_date","ready_date","quantity_produced","unit","status","method_notes","recorded_by","created_at","updated_at"],
   FarmMadeBatchInputs: ["batch_input_id","batch_id","item_id","source_lot_id","quantity_used","unit","created_at"],
   HarvestSessions: ["harvest_id","farm_id","field_id","plot_id","crop_cycle_id","harvest_date","start_time","end_time","harvest_team","status","notes","recorded_by","created_at","updated_at"],
-  HarvestLines: ["harvest_line_id","harvest_id","crop_id","variety_id","grade","quantity","unit","disposition","produce_lot_id","line_reference_key","notes"],
+  HarvestLines: ["harvest_line_id","harvest_id","crop_id","variety_id","grade","quantity","unit","disposition","produce_lot_id","line_reference_key","idempotency_key","notes"],
   ProduceLots: ["produce_lot_id","farm_id","crop_id","variety_id","source_plot_id","source_cycle_id","lot_code","grade","quantity_available","unit","harvest_date","storage_location","quality_status","status","created_at","updated_at"],
   ProduceLotMovements: ["produce_lot_movement_id","produce_lot_id","movement_type","quantity","unit","occurred_at","reference_type","reference_id","idempotency_key","recorded_by","reason","created_at"],
   PackhouseOperations: ["packhouse_operation_id","produce_lot_id","operation_type","operation_date","input_quantity","output_quantity","unit","loss_quantity","notes","recorded_by","created_at"],
@@ -65,10 +65,10 @@ const ERP_TABLES = Object.freeze({
   InvoiceLines: ["invoice_line_id","invoice_id","sales_line_id","product_id","description","quantity","unit","unit_price","line_total","created_at"],
   Dispatches: ["dispatch_id","fulfilment_id","dispatch_date","vehicle_reference","tracking_reference","received_by","status","notes","created_at"],
   Invoices: ["invoice_id","farm_id","customer_id","sales_order_id","invoice_number","invoice_date","due_date","status","currency_code","subtotal","tax_amount","total_amount","created_at","updated_at"],
-  Payments: ["payment_id","farm_id","customer_id","invoice_id","payment_date","amount","currency_code","payment_method","account_id","reference_number","status","notes","recorded_by","created_at"],
+  Payments: ["payment_id","farm_id","customer_id","invoice_id","payment_date","amount","currency_code","payment_method","account_id","reference_number","status","notes","recorded_by","idempotency_key","created_at"],
   SalesReturns: ["return_id","farm_id","sales_order_id","customer_id","return_date","reason","status","recorded_by","created_at"],
   SalesReturnLines: ["return_line_id","return_id","product_id","quantity","unit","disposition","produce_lot_id","notes"],
-  FinanceEntries: ["finance_entry_id","farm_id","entry_date","entry_type","category","description","amount","currency_code","payment_account","reference_type","reference_id","cost_class","status","recorded_by","created_at"],
+  FinanceEntries: ["finance_entry_id","farm_id","entry_date","entry_type","category","description","amount","currency_code","payment_account","reference_type","reference_id","cost_class","status","recorded_by","idempotency_key","created_at"],
   PaymentAccounts: ["account_id","farm_id","account_name","account_type","opening_balance","currency_code","status","created_at","updated_at"],
   CostAllocations: ["allocation_id","finance_entry_id","farm_id","crop_cycle_id","field_id","plot_id","allocation_basis","allocation_value","allocated_amount","currency_code","notes","created_at"],
   Assets: ["asset_id","farm_id","asset_name","asset_category","asset_code","purchase_date","purchase_cost","currency_code","current_status","site_id","field_id","custodian_id","notes","created_at","updated_at"],
@@ -82,7 +82,7 @@ const ERP_TABLES = Object.freeze({
   DemandRecords: ["demand_id","farm_id","customer_id","product_id","crop_id","variety_id","demand_type","quantity","unit","required_date","period_start","period_end","confidence","source_reference","status","created_by","created_at","updated_at"],
   ForecastVersions: ["forecast_version_id","farm_id","version_date","period_start","period_end","assumptions_json","coverage_json","confidence_label","created_by","created_at"],
   SavedViews: ["saved_view_id","user_id","farm_id","module_key","view_name","filters_json","sort_json","created_at","updated_at"],
-  IdempotencyKeys: ["idempotency_key","operation_type","result_id","created_at"],
+  IdempotencyKeys: ["idempotency_key","operation_type","result_id","status","payload_hash","created_at","updated_at"],
   AuditLog: ["audit_id","entity_type","entity_id","action","actor_user_id","occurred_at","change_summary"]
 });
 
@@ -368,29 +368,86 @@ function erpAudit_(type,id,action,before,after){
 }
 
 /** Idempotent append-only ledger operation. A key is mandatory for retryable writes. */
+function erpLedgerIdempotencyRecord_(table,key){
+  const sh=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(table);
+  if(!sh||sh.getLastRow()<2)return null;
+  const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+  const col=headers.indexOf("idempotency_key")+1;
+  if(!col)return null;
+  const ids=sh.getRange(2,col,sh.getLastRow()-1,1).getDisplayValues().flat();
+  const index=ids.indexOf(String(key));
+  if(index<0)return null;
+  const values=sh.getRange(index+2,1,1,headers.length).getValues()[0];
+  return {id:values[headers.indexOf(ERP_KEYS[table]||({
+    InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",
+    WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",
+    TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id",
+    ProduceLotMovements:"produce_lot_movement_id"
+  })[table])],row:index+2,headers:headers,values:values};
+}
+
+function erpSetIdempotencyStatus_(sheet,row,fields){
+  const headers=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0];
+  Object.keys(fields).forEach(k=>{const col=headers.indexOf(k)+1;if(col)sheet.getRange(row,col).setValue(fields[k]);});
+}
+
+/** Append-only, duplicate-safe transaction posting with a recoverable reservation. */
 function erpPostLedger(table,record,idempotencyKey){
-  const allowed=["InventoryTransactions","FinanceEntries","Payments","WageTransactions","IrrigationOperations","TaskExecution","HarvestLines","Attendance","ProduceLotMovements"];
+  const allowed=["InventoryTransactions","FinanceEntries","Payments","WageTransactions",
+    "IrrigationOperations","TaskExecution","HarvestLines","Attendance","ProduceLotMovements"];
   if(allowed.indexOf(table)<0)throw new Error("Unsupported ledger.");
   if(!idempotencyKey)throw new Error("An idempotency key is required.");
-  if(!record||typeof record!=="object")throw new Error("Record data is required.");
+  if(!record||typeof record!=="object"||Array.isArray(record))throw new Error("Record data is required.");
   return erpWithLock_(()=>{
     const ss=SpreadsheetApp.getActiveSpreadsheet(),keys=ss.getSheetByName("IdempotencyKeys");
-    const prior=keys.getLastRow()>=2?keys.getRange(2,1,keys.getLastRow()-1,1).getDisplayValues().flat():[];
-    const pos=prior.indexOf(idempotencyKey);
-    if(pos>=0){const keyRow=keys.getRange(pos+2,1,1,4).getValues()[0];if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(record.produce_lot_id);return {ok:true,duplicate:true,id:keyRow[2]};}
-    const sh=ss.getSheetByName(table),headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+    if(!keys)throw new Error("Idempotency schema is not installed.");
+    const keyHeaders=keys.getRange(1,1,1,keys.getLastColumn()).getDisplayValues()[0];
+    const keyCol=keyHeaders.indexOf("idempotency_key")+1;
+    const keyValues=keys.getLastRow()>=2?keys.getRange(2,keyCol,keys.getLastRow()-1,1).getDisplayValues().flat():[];
+    let keyRow=keyValues.indexOf(String(idempotencyKey));
+    const payloadHash=Utilities.base64Encode(Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,JSON.stringify(record),Utilities.Charset.UTF_8));
+    if(keyRow>=0){
+      keyRow+=2;
+      const existingHash=keyHeaders.indexOf("payload_hash")>=0
+        ?String(keys.getRange(keyRow,keyHeaders.indexOf("payload_hash")+1).getDisplayValue()||""):"";
+      if(existingHash&&existingHash!==payloadHash)throw new Error("This idempotency key was already used for a different transaction.");
+      const existingLedger=erpLedgerIdempotencyRecord_(table,idempotencyKey);
+      if(existingLedger){
+        erpSetIdempotencyStatus_(keys,keyRow,{result_id:existingLedger.id,status:"complete",updated_at:new Date()});
+        if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(record.produce_lot_id);
+        return {ok:true,duplicate:true,id:existingLedger.id};
+      }
+    }else{
+      const now=new Date(),keyRecord={
+        idempotency_key:idempotencyKey,operation_type:table,result_id:"",
+        status:"processing",payload_hash:payloadHash,created_at:now,updated_at:now
+      };
+      keys.appendRow(keyHeaders.map(h=>Object.prototype.hasOwnProperty.call(keyRecord,h)?keyRecord[h]:""));
+      keyRow=keys.getLastRow();
+    }
+    const sh=ss.getSheetByName(table);
+    if(!sh)throw new Error("Ledger table is not installed: "+table);
+    const headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
+    if(headers.indexOf("idempotency_key")<0)throw new Error("Ledger table is missing idempotency_key: "+table);
     const unknown=Object.keys(record).filter(k=>headers.indexOf(k)<0);
     if(unknown.length)throw new Error("Unknown ledger fields: "+unknown.join(", "));
     const now=new Date(),id=Utilities.getUuid(),data=Object.assign({},record);
-    const idField=ERP_KEYS[table]||({InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id",ProduceLotMovements:"produce_lot_movement_id"})[table];
-    data[idField]=id;if(!data.created_at)data.created_at=now;
+    const idField=ERP_KEYS[table]||({
+      InventoryTransactions:"transaction_id",FinanceEntries:"finance_entry_id",Payments:"payment_id",
+      WageTransactions:"wage_transaction_id",IrrigationOperations:"irrigation_operation_id",
+      TaskExecution:"execution_id",HarvestLines:"harvest_line_id",Attendance:"attendance_id",
+      ProduceLotMovements:"produce_lot_movement_id"
+    })[table];
+    data[idField]=id;data.idempotency_key=idempotencyKey;
+    if(!data.created_at)data.created_at=now;
     if(headers.indexOf("recorded_by")>=0&&!data.recorded_by)data.recorded_by=erpActor_();
-    if(headers.indexOf("idempotency_key")>=0)data.idempotency_key=idempotencyKey;
     const required=ERP_LEDGER_REQUIRED[table]||[];
     const missing=required.filter(k=>data[k]===undefined||data[k]===null||String(data[k]).trim()==="");
     if(missing.length)throw new Error("Required fields: "+missing.join(", "));
     erpValidateRelations_(data);
-    if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))throw new Error("Quantity must be greater than zero.");
+    if(data.quantity!==undefined&&(!(Number(data.quantity)>0)||!isFinite(Number(data.quantity))))
+      throw new Error("Quantity must be greater than zero.");
     if(table==="InventoryTransactions"&&["issue","sale","wastage","production_out","adjustment_out"].includes(String(data.transaction_type||"").toLowerCase())){
       const available=erpStockBalance(data.item_id,data.lot_id);
       if(available<Number(data.quantity))throw new Error("Insufficient available stock. Available: "+available);
@@ -400,7 +457,7 @@ function erpPostLedger(table,record,idempotencyKey){
       if(available<Number(data.quantity))throw new Error("Insufficient available produce. Available: "+available);
     }
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
-    keys.appendRow([idempotencyKey,table,id,now]);
+    erpSetIdempotencyStatus_(keys,keyRow,{result_id:id,status:"complete",updated_at:new Date()});
     erpAudit_(table,id,"post",{},data);
     if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);
     return {ok:true,duplicate:false,id:id};
