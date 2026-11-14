@@ -106,7 +106,7 @@ const ERP_KEYS = Object.freeze({
   SavedViews:"saved_view_id"
 });
 
-const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  ProduceLotMovements:["produce_lot_id","movement_type","quantity","unit","occurred_at"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
+const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id","item_id","transaction_type","quantity","unit","transaction_at"],\n  FinanceEntries:["farm_id","entry_date","entry_type","category","amount"],\n  Fulfilments:["sales_order_id","fulfilment_date","fulfilment_reference"],\n  Payments:["farm_id","payment_date","amount","currency_code","payment_method"],\n  WageTransactions:["farm_id","person_id","transaction_type","transaction_date","amount"],\n  TaskExecution:["task_id","person_id","started_at"],\n  HarvestLines:["harvest_id","crop_id","quantity","unit"],\n  ProduceLotMovements:["produce_lot_id","movement_type","quantity","unit","occurred_at"],\n  Attendance:["farm_id","person_id","work_date","attendance_status"],\n  IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"]\n});\n\nconst ERP_REQUIRED = Object.freeze({
   Farms:["farm_name","farm_code"],Sites:["farm_id","site_name"],Fields:["farm_id","field_name"],
   Plots:["farm_id","field_id","plot_name"],Beds:["farm_id","plot_id","bed_name"],
   Infrastructure:["farm_id","infrastructure_type","name"],Units:["unit_name","unit_symbol","dimension"],
@@ -133,7 +133,7 @@ const ERP_LEDGER_REQUIRED = Object.freeze({\n  InventoryTransactions:["farm_id",
 });
 
 const ERP_RELATIONS = Object.freeze({
-  organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",bed_id:"Beds",
+  organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",source_plot_id:"Plots",source_cycle_id:"CropCycles",bed_id:"Beds",
   crop_id:"Crops",variety_id:"Varieties",crop_profile_id:"CropProfiles",campaign_id:"PlantingCampaigns",
   crop_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",template_id:"TaskTemplates",event_id:"CalendarEvents",
   task_id:"Tasks",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
@@ -368,7 +368,7 @@ function erpPostLedger(table,record,idempotencyKey){
     const ss=SpreadsheetApp.getActiveSpreadsheet(),keys=ss.getSheetByName("IdempotencyKeys");
     const prior=keys.getLastRow()>=2?keys.getRange(2,1,keys.getLastRow()-1,1).getDisplayValues().flat():[];
     const pos=prior.indexOf(idempotencyKey);
-    if(pos>=0){const keyRow=keys.getRange(pos+2,1,1,4).getValues()[0];return {ok:true,duplicate:true,id:keyRow[2]};}
+    if(pos>=0){const keyRow=keys.getRange(pos+2,1,1,4).getValues()[0];if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(record.produce_lot_id);return {ok:true,duplicate:true,id:keyRow[2]};}
     const sh=ss.getSheetByName(table),headers=sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0];
     const unknown=Object.keys(record).filter(k=>headers.indexOf(k)<0);
     if(unknown.length)throw new Error("Unknown ledger fields: "+unknown.join(", "));
@@ -386,9 +386,14 @@ function erpPostLedger(table,record,idempotencyKey){
       const available=erpStockBalance(data.item_id,data.lot_id);
       if(available<Number(data.quantity))throw new Error("Insufficient available stock. Available: "+available);
     }
+    if(table==="ProduceLotMovements"&&["dispatch","sale","processing_out","internal_use","wastage","quarantine_out","adjustment_out"].includes(String(data.movement_type||"").toLowerCase())){
+      const available=erpProduceLotBalance_(data.produce_lot_id);
+      if(available<Number(data.quantity))throw new Error("Insufficient available produce. Available: "+available);
+    }
     sh.appendRow(headers.map(h=>Object.prototype.hasOwnProperty.call(data,h)?erpCoerce_(data[h]):""));
     keys.appendRow([idempotencyKey,table,id,now]);
     erpAudit_(table,id,"post",{},data);
+    if(table==="ProduceLotMovements")erpUpdateProduceLotSnapshot_(data.produce_lot_id);
     return {ok:true,duplicate:false,id:id};
   });
 }
