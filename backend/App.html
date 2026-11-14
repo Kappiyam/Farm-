@@ -281,8 +281,9 @@
     const lines=(await call("erpList","ProcurementLines",{limit:1000,filter:{procurement_id:procurementId}})).rows;
     if(!lines.length)throw new Error("Add procurement lines before receiving stock.");
     const items=await lookupOptions("InventoryItems");
+    const receiptReference="GRN-"+procurementId+"-"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
     const modal=document.createElement("dialog");
-    modal.innerHTML='<form class="dialog-body" id="receipt-form"><div class="dialog-head"><div><p>INVENTORY / GOODS RECEIPT</p><h2>Receive purchased stock</h2><p>Purchase orders do not increase stock. Confirm physical quantities and lot details here.</p></div><button type="button" class="icon-btn" id="receipt-close">×</button></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Outstanding</th><th>Receive now</th><th>Lot / batch</th><th>Unit cost</th><th>Expiry</th><th>Storage</th></tr></thead><tbody id="receipt-lines"></tbody></table></div><div class="dialog-actions"><button type="button" class="btn secondary" id="receipt-cancel">Cancel</button><button type="submit" class="btn primary" id="receipt-save">Confirm receipt</button></div></form>';
+    modal.innerHTML='<form class="dialog-body" id="receipt-form"><div class="dialog-head"><div><p>INVENTORY / GOODS RECEIPT</p><h2>Receive purchased stock</h2><p>Purchase orders do not increase stock. Confirm physical quantities and lot details here.</p><small>Receipt reference: '+esc(receiptReference)+'</small></div><button type="button" class="icon-btn" id="receipt-close">×</button></div><div class="table-wrap"><table><thead><tr><th>Item</th><th>Outstanding</th><th>Receive now</th><th>Lot / batch</th><th>Unit cost</th><th>Expiry</th><th>Storage</th></tr></thead><tbody id="receipt-lines"></tbody></table></div><div class="dialog-actions"><button type="button" class="btn secondary" id="receipt-cancel">Cancel</button><button type="submit" class="btn primary" id="receipt-save">Confirm receipt</button></div></form>';
     document.body.append(modal);modal.showModal();
     const close=()=>modal.close();$("#receipt-close",modal).onclick=close;$("#receipt-cancel",modal).onclick=close;modal.addEventListener("close",()=>modal.remove());
     const active=lines.filter(l=>(Number(l.quantity_ordered)||0)>(Number(l.quantity_received)||0)+0.000001);
@@ -296,6 +297,7 @@
       const btn=$("#receipt-save",modal);btn.disabled=true;btn.textContent="Posting receipt…";
       const receipts=[...$("#receipt-lines",modal).querySelectorAll("tr[data-line]")].map(tr=>({
         procurement_line_id:tr.dataset.line,
+        receipt_reference:receiptReference,
         quantity:Number(tr.querySelector("[data-receive-qty]").value),
         lot_code:tr.querySelector("[data-lot-code]").value.trim(),
         unit_cost:Number(tr.querySelector("[data-unit-cost]").value),
@@ -381,6 +383,7 @@
         String(l.status||"active").toLowerCase()==="active"&&Number(l.quantity_available)>0);
       return '<div class="panel" data-order-line="'+esc(x.line.sales_line_id)+'"><h3>'+esc(product.product_name||x.line.description||"Order line")+'</h3><p>Outstanding '+esc(x.remaining)+' '+esc(x.line.unit)+'</p><div class="form-grid" style="margin-top:9px"><div class="field"><label>Produce lot *</label><select data-lot required><option value="">Select lot</option>'+eligible.map(l=>'<option value="'+esc(l.produce_lot_id)+'">'+esc(l.lot_code)+' · '+esc(l.grade)+' · available '+esc(l.quantity_available)+'</option>').join("")+'</select></div><div class="field"><label>Quantity to fulfil *</label><input data-quantity required type="number" min="0.0001" max="'+esc(x.remaining)+'" step="any" value="'+esc(Math.min(x.remaining,eligible.length?Number(eligible[0].quantity_available):0))+'"></div></div><small>'+ (eligible.length?"Only matching crop, grade and unit lots are listed.":"No matching stock lots are currently available.")+'</small></div>';
     }).join("");
+    const fulfilmentReference="FUL-"+orderId+"-"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
     $("#fulfil-form",modal).onsubmit=async e=>{
       e.preventDefault();const btn=$("#fulfil-save",modal);btn.disabled=true;btn.textContent="Saving fulfilment…";
       const rows=[...$("#fulfil-lines",modal).querySelectorAll("[data-order-line]")];
@@ -389,9 +392,8 @@
         quantity:Number(el.querySelector("[data-quantity]").value)
       })).filter(x=>x.quantity>0);
       if(!fulfilLines.length||fulfilLines.some(x=>!x.produce_lot_id)){toast("Select a produce lot and enter a quantity for each line.",true);btn.disabled=false;btn.textContent="Save fulfilment";return;}
-      const reference="FUL-"+orderId+"-"+Date.now();
       try{
-        const result=await call("erpFulfilSalesOrder",orderId,reference,fulfilLines,new Date().toISOString());
+        const result=await call("erpFulfilSalesOrder",orderId,fulfilmentReference,fulfilLines,new Date().toISOString());
         close();toast("Fulfilment saved · "+result.orderStatus.replace(/_/g," "));state.lookups={};fetchRows();
       }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Save fulfilment";}
     };
