@@ -43,8 +43,6 @@ function erpReceiveProcurement(procurementId,receipts){
     if(String(line.procurement_id)!==String(procurementId))throw new Error("Receipt line does not belong to this procurement order.");
     const qty=Number(r.quantity);
     if(!(qty>0))throw new Error("Receipt quantity must be greater than zero.");
-    if(qty>(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0)+0.000001)
-      throw new Error("Receipt exceeds the outstanding ordered quantity for "+line.description+".");
     const item=erpGetRecord_("InventoryItems",line.item_id);
     const lotCode=String(r.lot_code||"").trim();
     if(!lotCode)throw new Error("Lot/batch code is required for received stock.");
@@ -60,6 +58,10 @@ function erpReceiveProcurement(procurementId,receipts){
       lot=saved.record;
     }
     const key="procurement:"+procurementId+":"+line.procurement_line_id+":"+lotCode+":"+qty;
+    const prior=erpFindOne_("IdempotencyKeys",{idempotency_key:key});
+    const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0));
+    if(!prior&&qty>outstanding+0.000001)
+      throw new Error("Receipt exceeds the outstanding ordered quantity for "+line.description+".");
     const posted=erpPostLedger("InventoryTransactions",{
       farm_id:order.farm_id,item_id:line.item_id,lot_id:lot.lot_id,transaction_type:"receipt",
       quantity:qty,unit:r.unit||line.unit,unit_cost:r.unit_cost===undefined?line.unit_cost:r.unit_cost,
@@ -76,11 +78,11 @@ function erpReceiveProcurement(procurementId,receipts){
     results.push({procurement_line_id:line.procurement_line_id,lot_id:lot.lot_id,posted:posted,received_total:received,item_name:item.item_name});
   });
   const lines=erpRead_("ProcurementLines",{limit:1000,filter:{procurement_id:procurementId}}).rows;
-  const total=lines.reduce((sum,l)=>sum+(Number(l.quantity_ordered)||0),0);
-  const received=lines.reduce((sum,l)=>sum+(Number(l.quantity_received)||0),0);
-  const status=received<=0?"ordered":received+0.000001>=total?"received":"partially_received";
+  const anyReceived=lines.some(l=>Number(l.quantity_received)>0);
+  const allReceived=lines.length>0&&lines.every(l=>(Number(l.quantity_received)||0)+0.000001>=(Number(l.quantity_ordered)||0));
+  const status=allReceived?"received":anyReceived?"partially_received":"ordered";
   erpSave("ProcurementOrders",{procurement_id:procurementId,status:status,received_date:new Date()});
-  return {ok:true,procurementId:procurementId,status:status,receivedQuantity:received,orderedQuantity:total,lines:results};
+  return {ok:true,procurementId:procurementId,status:status,allLinesReceived:allReceived,lines:results};
 }
 
 /** Finalise a harvest session and create traceable produce lots for sale/process stock. */
