@@ -342,3 +342,53 @@ function ensureTrailingHeaders_(sheet, requiredHeaders, tableName) {
   }
   return { table: tableName, appended: missing };
 }
+
+
+/**
+ * Read-only preview for the first organisation and farm.
+ * Does not create or modify any records.
+ */
+function previewInitialOrganisationSetup() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error("Database spreadsheet is unavailable.");
+
+  const requiredTabs = ["Organizations", "OrganizationUsers", "FarmMemberships", "FarmSettings", "Farms"];
+  const missingTabs = requiredTabs.filter(function(name) { return !ss.getSheetByName(name); });
+  if (missingTabs.length) throw new Error("Required schema tabs are missing: " + missingTabs.join(", "));
+
+  function hasCode(sheetName, codeColumn, code) {
+    const sheet = ss.getSheetByName(sheetName);
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return false;
+    const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+    const index = headers.indexOf(codeColumn);
+    if (index < 0) throw new Error("Required column '" + codeColumn + "' is missing from " + sheetName + ".");
+    return sheet.getRange(2, index + 1, lastRow - 1, 1).getDisplayValues()
+      .some(function(row) { return String(row[0]).trim().toUpperCase() === code; });
+  }
+
+  return {
+    ok: true,
+    readOnly: true,
+    appVersion: APP_VERSION,
+    schemaVersion: SCHEMA_VERSION,
+    proposedOrganization: {
+      name: "Kappiyam Organic Farm",
+      code: "KAPPIYAM",
+      countryCode: "IN",
+      timezone: "Asia/Kolkata",
+      defaultLanguage: "ta",
+      currencyCode: "INR"
+    },
+    proposedFarm: {
+      name: "Madampatti Farm",
+      code: "MADAMPATTI",
+      address: "Madampatti, Kuppanur, Coimbatore, Tamil Nadu, India",
+      areaUnit: "acre"
+    },
+    organizationCodeExists: hasCode("Organizations", "organization_code", "KAPPIYAM"),
+    farmCodeExists: hasCode("Farms", "farm_code", "MADAMPATTI"),
+    missingTabs: missingTabs
+  };
+}
