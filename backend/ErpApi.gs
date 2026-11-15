@@ -61,7 +61,8 @@ function erpSave(tableName, record, requestKey) {
   }
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
   try {
-    if (requestKey && erpIdempotentResult_(requestKey)) return erpIdempotentResult_(requestKey);
+    var priorResult=requestKey&&erpIdempotentResult_(requestKey,"erpSave");
+    if (priorResult) return priorResult;
     var schema=ERP_TABLE_DEFINITIONS[tableName].split("|"), key=ERP_TABLE_KEYS[tableName];
     var clean={};
     Object.keys(record).forEach(function(k){
@@ -273,10 +274,11 @@ function erpAppendRaw_(name,record,schema){
 }
 function erpActor_(){try{return Session.getActiveUser().getEmail()||"owner";}catch(e){return "owner";}}
 function erpActive_(status){return ["inactive","archived","cancelled","void"].indexOf(String(status||"active").toLowerCase())<0;}
-function erpIdempotentResult_(key){
+function erpIdempotentResult_(key,expectedAction){
   if(!key)return null;
   var rows=erpReadTable_("IdempotencyKeys"),r=rows.find(function(x){return String(x.request_key)===String(key);});
   if(!r)return null;
+  if(expectedAction&&r.action&&String(r.action)!==String(expectedAction))throw new Error("Request key is already associated with a different workflow action.");
   var status=String(r.status||"").toLowerCase();
   if(status==="in_progress"||status==="failed")throw new Error("A previous attempt for this request key did not complete cleanly. Do not retry blindly; inspect the related records and reconcile the operation first.");
   if(status&&status!=="completed")throw new Error("Unknown idempotency state for this request. Manual reconciliation is required.");
