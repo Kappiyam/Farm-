@@ -77,6 +77,10 @@ function rows(table){return context.erpReadTable_(table);}
 function assert(ok,message){if(!ok)throw new Error(message);}
 function throws(fn,message){let did=false;try{fn();}catch(e){did=true;}assert(did,message);}
 
+// Generic saves must not silently discard fields or create records with caller-supplied unknown keys.
+throws(()=>context.erpSave("Sites",{farm_id:"F-1",site_name:"Test site",unexpected_field:"bad"}),"Unknown save fields must be rejected.");
+throws(()=>context.erpSave("Sites",{site_id:"NONEXISTENT",farm_id:"F-1",site_name:"Test site"}),"Unknown supplied primary keys must not create records.");
+
 // Procurement: repeated input lines must be summed before any write.
 seed("ProcurementOrders",{procurement_id:"PO-1",farm_id:"F-1",supplier_id:"S-1",status:"ordered"});
 seed("ProcurementLines",{procurement_line_id:"POL-1",procurement_id:"PO-1",farm_id:"F-1",item_id:"I-1",quantity_ordered:10,quantity_received:0,unit:"kg",unit_cost:5});
