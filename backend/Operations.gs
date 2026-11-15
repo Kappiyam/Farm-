@@ -47,7 +47,43 @@ function erpUpdateProduceLotSnapshot_(lotId){
 }
 
 /** Receive a procurement line. Stock increases only after this confirmed receipt. */
-function erpReceiveProcurement(procurementId,receipts){
+/** Issue a verified quantity from one stock lot to a farm plot or general farm use. */
+function erpIssueInventoryLot(lotId,quantity,plotId,notes,reference,requestKey){
+  if(!requestKey)throw new Error("A stable stock-issue request key is required.");
+  const lot=erpGetRecord_("StockLots",lotId);
+  if(["inactive","depleted","closed"].includes(String(lot.status||"").toLowerCase()))
+    throw new Error("The selected stock lot is not active.");
+  const item=erpGetRecord_("InventoryItems",lot.item_id);
+  if(String(item.farm_id)!==String(lot.farm_id))
+    throw new Error("Stock item does not belong to the lot's farm.");
+  const qty=Number(quantity);
+  if(!(qty>0)||!isFinite(qty))throw new Error("Issue quantity must be greater than zero.");
+  if(plotId){
+    const plot=erpGetRecord_("Plots",plotId);
+    if(String(plot.farm_id)!==String(lot.farm_id)||["inactive","closed"].includes(String(plot.status||"").toLowerCase()))
+      throw new Error("Destination plot is not active for this farm.");
+  }
+  const already=erpFindOne_("InventoryTransactions",{idempotency_key:requestKey});
+  if(already){
+    return {ok:true,duplicate:true,transactionId:already.transaction_id,
+      remaining:erpStockBalance(lot.item_id,lot.lot_id,lot.farm_id),unit:already.unit};
+  }
+  const available=erpStockBalance(lot.item_id,lot.lot_id,lot.farm_id);
+  if(qty>available+0.000001)throw new Error("Issue quantity exceeds available stock. Available: "+available);
+  const posted=erpPostLedger("InventoryTransactions",{
+    farm_id:lot.farm_id,item_id:lot.item_id,lot_id:lot.lot_id,
+    transaction_type:"issue",quantity:qty,unit:item.base_unit||lot.unit||"",
+    transaction_at:new Date(),from_location:lot.storage_location||"",
+    to_location:plotId||"",reference_type:"farm_use",
+    reference_id:reference||plotId||lot.lot_id,reason:notes||"Farm use"
+  },requestKey);
+  const remaining=erpStockBalance(lot.item_id,lot.lot_id,lot.farm_id);
+  return {ok:true,duplicate:!!posted.duplicate,transactionId:posted.id,remaining:remaining,
+    unit:item.base_unit||lot.unit||""};
+}
+
+function erpReceiveProcurement(procurementId,receipts,requestKey){
+  if(!requestKey)throw new Error("A stable procurement receipt request key is required.");
   if(!Array.isArray(receipts)||!receipts.length)throw new Error("At least one receipt line is required.");
   const order=erpGetRecord_("ProcurementOrders",procurementId);
   if(["cancelled","closed"].includes(String(order.status||"").toLowerCase()))throw new Error("This procurement order is closed.");
@@ -68,12 +104,10 @@ function erpReceiveProcurement(procurementId,receipts){
         expiry_date:r.expiry_date||"",storage_location:r.storage_location||line.storage_location||"",
         supplier_id:order.supplier_id,unit_cost:r.unit_cost===undefined?line.unit_cost:r.unit_cost,
         currency_code:order.currency_code,status:"active"
-      });
+      },requestKey+":lot:"+line.procurement_line_id+":"+lotCode);
       lot=saved.record;
     }
-    const receiptReference=String(r.receipt_reference||"").trim();
-    if(!receiptReference)throw new Error("A stable receipt reference is required for safe retries.");
-    const key="procurement:"+procurementId+":"+receiptReference+":"+line.procurement_line_id+":"+lotCode;
+    const key=requestKey+":"+line.procurement_line_id+":"+lotCode;
     const prior=erpFindOne_("IdempotencyKeys",{idempotency_key:key});
     const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0));
     if(!prior&&qty>outstanding+0.000001)
@@ -156,11 +190,34 @@ function erpGetProduceLotBalance(lotId){
 }
 
 /** Fulfil an order from identified produce lots. Saleable stock is reduced by ledger movement. */
-function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate){
+function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate,requestKey){
+  if(!requestKey)throw new Error("A stable fulfilment request key is required.");
   if(!fulfilmentReference)throw new Error("A stable fulfilment reference is required for safe retries.");
   if(!Array.isArray(lines)||!lines.length)throw new Error("At least one fulfilment line is required.");
   const order=erpGetRecord_("SalesOrders",orderId);
   if(["cancelled","closed"].includes(String(order.status||"").toLowerCase()))throw new Error("This sales order is closed.");
+  const requestedByLine={},requestedByLot={};
+  lines.forEach(line=>{
+    const salesLine=erpGetRecord_("SalesOrderLines",line.sales_line_id);
+    if(String(salesLine.sales_order_id)!==String(orderId))throw new Error("Sales line does not belong to this order.");
+    const lot=erpGetRecord_("ProduceLots",line.produce_lot_id);
+    if(String(lot.farm_id)!==String(order.farm_id))throw new Error("Produce lot belongs to another farm.");
+    const qty=Number(line.quantity);
+    if(!(qty>0)||!isFinite(qty))throw new Error("Fulfilment quantity must be greater than zero.");
+    requestedByLine[line.sales_line_id]=(requestedByLine[line.sales_line_id]||0)+qty;
+    requestedByLot[line.produce_lot_id]=(requestedByLot[line.produce_lot_id]||0)+qty;
+  });
+  Object.keys(requestedByLine).forEach(lineId=>{
+    const line=erpGetRecord_("SalesOrderLines",lineId);
+    const fulfilled=erpRead_("FulfilmentLines",{limit:1000,filter:{sales_line_id:lineId}}).rows
+      .reduce((sum,x)=>sum+(Number(x.quantity)||0),0);
+    if(requestedByLine[lineId]>(Number(line.quantity_ordered||0)-fulfilled)+0.000001)
+      throw new Error("Fulfilment exceeds the unfulfilled order quantity.");
+  });
+  Object.keys(requestedByLot).forEach(lotId=>{
+    if(requestedByLot[lotId]>erpProduceLotBalance_(lotId)+0.000001)
+      throw new Error("Fulfilment exceeds available produce in lot "+lotId+".");
+  });
   let header=erpFindOne_("Fulfilments",{fulfilment_reference:fulfilmentReference});
   if(header&&String(header.sales_order_id)!==String(orderId))throw new Error("Fulfilment reference is already used by another order.");
   if(!header)header=erpSave("Fulfilments",{
@@ -183,7 +240,7 @@ function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate){
       .reduce((sum,fl)=>sum+(Number(fl.quantity)||0),0);
     const remaining=(Number(salesLine.quantity_ordered)||0)-currentFulfilled;
     if(qty>remaining+0.000001)throw new Error("Fulfilment exceeds the unfulfilled order quantity.");
-    const key="fulfilment:"+fulfilmentReference+":"+line.sales_line_id+":"+line.produce_lot_id;
+    const key=requestKey+":"+line.sales_line_id+":"+line.produce_lot_id;
     erpPostLedger("ProduceLotMovements",{
       produce_lot_id:line.produce_lot_id,movement_type:"dispatch",quantity:qty,unit:line.unit||lot.unit,
       occurred_at:fulfilmentDate||new Date(),reference_type:"Fulfilment",reference_id:header.fulfilment_id,
@@ -192,7 +249,7 @@ function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate){
     const saved=erpSave("FulfilmentLines",{
       fulfilment_id:header.fulfilment_id,sales_line_id:line.sales_line_id,
       produce_lot_id:line.produce_lot_id,quantity:qty,unit:line.unit||lot.unit,idempotency_key:key
-    });
+    },key+":line");
     results.push({lineId:saved.id,duplicate:false,quantity:qty,unit:line.unit||lot.unit});
   });
   // Recompute fulfilled quantities from fulfilment lines, never from a button-tap increment.
@@ -222,12 +279,12 @@ function erpNextInvoiceNumber_(){
 }
 
 /** Create invoice lines only for fulfilled quantities that have not already been invoiced. */
-function erpCreateInvoiceFromOrder(orderId,dueDate){
+function erpCreateInvoiceFromOrder(orderId,dueDate,requestKey){
   const order=erpGetRecord_("SalesOrders",orderId);
   const orderLines=erpRead_("SalesOrderLines",{limit:1000,filter:{sales_order_id:orderId}}).rows;
   const invoices=erpRead_("Invoices",{limit:1000,filter:{sales_order_id:orderId}}).rows;
   const issuedCount=invoices.filter(i=>["issued","paid","partially_paid"].includes(String(i.status||"").toLowerCase())).length;
-  const generationKey=String(orderId)+"|invoice-batch|"+String(issuedCount+1);
+  const generationKey=requestKey?String(orderId)+"|invoice|"+String(requestKey):String(orderId)+"|invoice-batch|"+String(issuedCount+1);
   let invoice=erpFindOne_("Invoices",{generation_key:generationKey});
   const allInvoiceLines=erpRead_("InvoiceLines",{limit:1000}).rows;
   const pending=[];
