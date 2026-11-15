@@ -189,7 +189,8 @@
     const value=select.value;if(!value)return;
     select.disabled=true;
     try{
-      const result=await call("erpUpdateTaskStatus",select.dataset.taskStatus,value,"Updated from task board");
+      const statusRequestKey="task-status:"+select.dataset.taskStatus+":"+value+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
+      const result=await call("erpUpdateTaskStatus",select.dataset.taskStatus,value,"Updated from task board",statusRequestKey);
       toast("Task moved to "+result.status.replace(/_/g," "));
       fetchTaskBoard();
     }catch(e){toast(e.message,true);select.disabled=false;select.value="";}
@@ -340,8 +341,9 @@
     '</tbody></table></div><div class="notice">'+esc(result.notice)+'</div><div class="dialog-actions"><button class="btn secondary" id="cancel-plan">Close</button><button class="btn primary" id="create-plan" '+(result.plannedCount===result.existingCount?"disabled":"")+'>Generate planned tasks</button></div></div>';
    document.body.append(dialog);dialog.showModal();const close=()=>dialog.close();
    $("#close-plan",dialog).onclick=close;$("#cancel-plan",dialog).onclick=close;dialog.addEventListener("close",()=>dialog.remove());
+   const cropTaskRequestKey="crop-task-generation:"+cycleId+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
    $("#create-plan",dialog).onclick=async()=>{const b=$("#create-plan",dialog);b.disabled=true;b.textContent="Generating…";
-    try{const done=await call("erpGenerateCropTasks",cycleId);toast(done.createdCount+" planned tasks generated; "+done.skippedCount+" duplicates skipped.");close();fetchRows();}
+    try{const done=await call("erpGenerateCropTasks",cycleId,cropTaskRequestKey);toast(done.createdCount+" planned tasks generated; "+done.skippedCount+" duplicates skipped.");close();fetchRows();}
     catch(e){toast(e.message,true);b.disabled=false;b.textContent="Generate planned tasks";}
    };
   }catch(e){toast(e.message,true);}
@@ -661,7 +663,7 @@
   document.body.append(dlg);dlg.showModal();const close=()=>dlg.close();$("#event-close",dlg).onclick=close;dlg.addEventListener("close",()=>dlg.remove());
   $("#event-task",dlg).onclick=()=>{close();openTaskFromEvent(event);};
   $("#event-edit",dlg).onclick=()=>{close();openCalendarEventForm(event,occurrenceStart);};
-  $("#event-cancel",dlg).onclick=async()=>{if(!confirm("Cancel only this occurrence?"))return;try{await call("erpCancelCalendarOccurrence",eventId,occurrenceStart,"Cancelled by user");close();toast("Event occurrence cancelled.");loadCalendarEvents();}catch(e){toast(e.message,true);}};
+  $("#event-cancel",dlg).onclick=async()=>{if(!confirm("Cancel only this occurrence?"))return;try{const cancelRequestKey="calendar-cancel:"+eventId+":"+occurrenceStart;await call("erpCancelCalendarOccurrence",eventId,occurrenceStart,"Cancelled by user",cancelRequestKey);close();toast("Event occurrence cancelled.");loadCalendarEvents();}catch(e){toast(e.message,true);}};
  }
  function localDateTime(value){
   if(!value)return"";
@@ -692,7 +694,8 @@
     else{
       delete data.farm_id;delete data.recurrence_type;delete data.recurrence_interval;delete data.recurrence_end;delete data.occurrence_limit;delete data.all_day;delete data.status;
       const scope=f.get("scope")||"single";
-      await call("erpUpdateCalendarEvent",master.event_id,scope,occurrenceStart,data,"Updated in calendar");
+      const updateRequestKey="calendar-update:"+master.event_id+":"+scope+":"+occurrenceStart+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
+      await call("erpUpdateCalendarEvent",master.event_id,scope,occurrenceStart,data,"Updated in calendar",updateRequestKey);
     }
     close();toast("Calendar event saved.");loadCalendarEvents();
    }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Save event";}
