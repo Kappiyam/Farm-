@@ -229,7 +229,7 @@ function erpGetCalendarRange(farmId,startDate,endDate) {
   return {ok:true,events:out};
 }
 
-function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason) {
+function erpCancelCalendarOccurrenceUnlocked_(eventId,occurrenceStart,reason) {
   var event=erpFindByKey_("CalendarEvents","event_id",eventId);if(!event)throw new Error("Calendar event not found.");
   var existing=erpReadTable_("CalendarExceptions").find(function(x){return String(x.event_id)===String(eventId)&&String(x.occurrence_start)===String(occurrenceStart);});
   if(existing)erpUpdateByKey_("CalendarExceptions","calendar_exception_id",existing.calendar_exception_id,{exception_type:"cancel",reason:reason||"",created_at:new Date().toISOString()});
@@ -237,7 +237,7 @@ function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason) {
   return {ok:true,cancelled:true};
 }
 
-function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,patch,reason) {
+function erpUpdateCalendarEventUnlocked_(eventId,scope,occurrenceStart,patch,reason) {
   var event=erpFindByKey_("CalendarEvents","event_id",eventId);if(!event)throw new Error("Calendar event not found.");
   patch=patch||{};
   if(scope==="single"){
@@ -292,3 +292,7 @@ function erpRunLockedWorkflow_(action,requestKey,work) {
     lock.releaseLock();
   }
 }
+
+function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason,requestKey){return erpRunLockedWorkflow_("erpCancelCalendarOccurrence",requestKey,function(){return erpCancelCalendarOccurrenceUnlocked_(eventId,occurrenceStart,reason);});}
+
+function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,patch,reason,requestKey){return erpRunLockedWorkflow_("erpUpdateCalendarEvent",requestKey,function(){return erpUpdateCalendarEventUnlocked_(eventId,scope,occurrenceStart,patch,reason);});}
