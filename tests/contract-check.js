@@ -92,6 +92,11 @@ for (const table of uiTables) check(schemaTables.has(table), "Frontend table mis
 const duplicates = [...backend.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1]).filter((n,i,a)=>a.indexOf(n)!==i);
 for (const name of new Set(duplicates)) errors.push("Duplicate backend function declaration: " + name);
 
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "backend", "appsscript.json"), "utf8"));
+check(manifest.webapp && manifest.webapp.executeAs === "USER_DEPLOYING" && manifest.webapp.access === "MYSELF",
+  "Deployment must remain owner-only until user identity and farm-level permissions are implemented.");
+
+
 for (const file of ["ErpApi.gs", "ErpWorkflows.gs"]) {
   check(backend.includes("function erpRunLockedWorkflow_"), "Missing shared workflow lock helper.");
 }
