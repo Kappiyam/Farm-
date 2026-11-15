@@ -172,6 +172,9 @@ assert(calendarAfter.some(x=>x.occurrence_start===calendarInitial[1].occurrence_
 
 const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
+seed("Payments",{payment_id:"PAY-OVER",farm_id:"F-1",invoice_id:invoice.invoice_id,customer_id:"C-1",amount:1,payment_date:"2026-11-15",payment_method:"cash"});
+const overpaidIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
+assert(overpaidIntegrity.issues.some(x=>x.entity_type==="Invoice"&&x.issue.indexOf("payments exceed")>=0),"Integrity report must detect invoice overpayment.");
 seed("FulfilmentLines",{fulfilment_id:"FUL-ORPHAN",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:1,unit:"kg"});
 const partialIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(partialIntegrity.issues.some(x=>x.entity_type==="Fulfilment"&&x.entity_id==="FUL-ORPHAN"),"Integrity report must detect fulfilment lines without matching dispatch movements.");
