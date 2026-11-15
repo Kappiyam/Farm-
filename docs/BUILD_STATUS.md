@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `594dd85` (mocked workflow invariant tests passing)
+- Latest known work package: `b4a4f06` (crop-task duplicate protection covered by workflow tests)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -28,11 +28,11 @@ Last updated: 2026-11-15
 2. Bootstrap, generic CRUD/list/archive/CSV, dashboard, task board, task status history, assignment, execution and crop-task planning services.
 3. Procurement receipt, harvest finalisation, produce-lot fulfilment, invoicing, customer payment, production-gap, reporting and calendar services.
 4. GitHub Actions syntax and contract workflow.
-5. Shared ScriptLock wrapper for critical multi-sheet workflows: procurement, harvest, fulfilment, invoicing, customer payments, task assignment/execution/status, ledger posting and archive.
+5. Shared ScriptLock wrapper for critical multi-sheet workflows: procurement, harvest, fulfilment, invoicing, customer payments, task assignment/execution/status, ledger posting, archive, crop-task generation and calendar mutations.
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation.
 8. Initial contract audit: all 26 frontend API call names resolve; all 77 UI table references are present in the canonical schema; 80 canonical tables are defined.
-9. GitHub Actions passed on commit `594dd85`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines, same-lot fulfilment aggregation, idempotent receipt/fulfilment/invoice/payment replay and task status transitions. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
+9. GitHub Actions passed on commit `b4a4f06`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines, same-lot fulfilment aggregation, idempotent receipt/fulfilment/invoice/payment replay, task status transitions and duplicate-safe crop-task generation. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
 
 ## Known limitations and remaining work
 
