@@ -132,6 +132,8 @@ context.erpIssueInventoryLot(firstStockLot.lot_id,2,"","Field use","Irrigation b
 context.erpIssueInventoryLot(firstStockLot.lot_id,2,"","Field use","Irrigation block","issue-once");
 assert(Number(rows("StockLots").find(x=>x.lot_id===firstStockLot.lot_id).quantity_available)===2,"Stock issue must reduce lot balance once.");
 assert(rows("InventoryTransactions").filter(x=>String(x.lot_id)===String(firstStockLot.lot_id)&&x.transaction_type==="issue").length===1,"Stock issue replay must not duplicate issue transactions.");
+seed("Plots",{plot_id:"P-OTHER",farm_id:"F-2",plot_name:"Other farm plot",status:"active"});
+throws(()=>context.erpIssueInventoryLot(firstStockLot.lot_id,1,"P-OTHER","Wrong plot","Test","issue-wrong-plot"),"Stock must not be issued to a plot in another farm.");
 throws(()=>context.erpIssueInventoryLot(firstStockLot.lot_id,3,"","Overissue","Test","issue-over"),"Stock issue must not exceed available quantity.");
 
 
