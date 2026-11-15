@@ -220,7 +220,8 @@ function erpUpdateCalendarEventRow_(eventId,changes,actionReason){
  * - future: snapshot past events, cap the old series, and create a continuation;
  * - series: snapshot past events, then update the future pattern.
  */
-function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
+function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason,requestKey){
+  if(!requestKey)throw new Error("A stable calendar-update request key is required.");
   scope=String(scope||"").toLowerCase();
   if(!["single","future","series"].includes(scope))throw new Error("Choose single, future or series edit scope.");
   if(!changes||typeof changes!=="object"||Array.isArray(changes))throw new Error("Calendar changes are required.");
@@ -237,18 +238,45 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
     if(prior){
       const saved=erpSave("CalendarEventOverrides",{override_id:prior.override_id,
         event_id:eventId,occurrence_start:erpCalKey_(occurrence),action:"update",
-        overrides_json:JSON.stringify(merged),reason:reason||"",updated_at:new Date()});
+        overrides_json:JSON.stringify(merged),reason:reason||"",updated_at:new Date()},requestKey);
       return {ok:true,scope:scope,override:saved.record};
     }
     const saved=erpSave("CalendarEventOverrides",{event_id:eventId,occurrence_start:erpCalKey_(occurrence),
-      action:"update",overrides_json:JSON.stringify(merged),reason:reason||"",created_by:erpActor_()});
+      action:"update",overrides_json:JSON.stringify(merged),reason:reason||"",created_by:erpActor_()},requestKey);
     return {ok:true,scope:scope,override:saved.record};
   }
   return erpWithLock_(()=>{
+    const ss=SpreadsheetApp.getActiveSpreadsheet(),idem=ss.getSheetByName("IdempotencyKeys");
+    if(!idem)throw new Error("Idempotency schema is not installed.");
+    const ih=idem.getRange(1,1,1,idem.getLastColumn()).getDisplayValues()[0];
+    const keyCol=ih.indexOf("idempotency_key")+1,statusCol=ih.indexOf("status")+1,
+      actionCol=ih.indexOf("operation_type")+1,resultCol=ih.indexOf("result_id")+1,
+      hashCol=ih.indexOf("payload_hash")+1;
+    if(!keyCol||!statusCol||!actionCol||!resultCol||!hashCol)throw new Error("Calendar idempotency columns are unavailable.");
+    const payloadHash=Utilities.base64Encode(Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,JSON.stringify({eventId:eventId,scope:scope,occurrenceStart:String(occurrenceStart||""),changes:changes,reason:reason||""}),Utilities.Charset.UTF_8));
+    const keyValues=idem.getLastRow()>=2?idem.getRange(2,keyCol,idem.getLastRow()-1,1).getDisplayValues().flat():[];
+    let markerRow=keyValues.indexOf(String(requestKey));
+    if(markerRow>=0){
+      markerRow+=2;
+      const oldAction=String(idem.getRange(markerRow,actionCol).getDisplayValue());
+      const oldHash=String(idem.getRange(markerRow,hashCol).getDisplayValue());
+      const oldStatus=String(idem.getRange(markerRow,statusCol).getDisplayValue());
+      if(oldAction!=="CalendarEventUpdate"||oldHash!==payloadHash)throw new Error("Calendar request key was already used for a different operation.");
+      if(oldStatus==="complete")return {ok:true,duplicate:true,scope:scope,eventId:idem.getRange(markerRow,resultCol).getDisplayValue()};
+      throw new Error("The earlier calendar update did not complete. Review the calendar series before retrying.");
+    }
+    const marker={idempotency_key:requestKey,operation_type:"CalendarEventUpdate",result_id:eventId,
+      status:"processing",payload_hash:payloadHash,created_at:new Date(),updated_at:new Date()};
+    idem.appendRow(ih.map(h=>Object.prototype.hasOwnProperty.call(marker,h)?marker[h]:""));
+    markerRow=idem.getLastRow();
+    try{
     erpMaterialisePastCalendarOccurrences_(event);
     if(scope==="series"||!recurring){
       const updated=erpUpdateCalendarEventRow_(eventId,changes,reason);
-      return {ok:true,scope:scope,event:updated,pastOccurrencesPreserved:true};
+      const result={ok:true,scope:scope,event:updated,pastOccurrencesPreserved:true};
+      idem.getRange(markerRow,statusCol).setValue("complete");idem.getRange(markerRow,resultCol).setValue(eventId);idem.getRange(markerRow,ih.indexOf("updated_at")+1).setValue(new Date());
+      return result;
     }
     if(occurrence<erpCalDate_(event.start_at))throw new Error("Selected occurrence is before the series start.");
     const matching=erpCalOccurrencesForMaster_(event,occurrence,occurrence);
@@ -271,17 +299,26 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason){
     delete continuation.created_at;
     delete continuation.updated_at;
     const saved=erpInsertCalendarEventUnlocked_(continuation);
-    return {ok:true,scope:scope,originalEventId:eventId,continuation:saved.record,
+    const result={ok:true,scope:scope,originalEventId:eventId,continuation:saved.record,
       pastOccurrencesPreserved:true};
+    idem.getRange(markerRow,statusCol).setValue("complete");idem.getRange(markerRow,resultCol).setValue(saved.record.event_id||eventId);
+    idem.getRange(markerRow,ih.indexOf("updated_at")+1).setValue(new Date());
+    return result;
+    }catch(error){
+      idem.getRange(markerRow,statusCol).setValue("failed");
+      const updatedCol=ih.indexOf("updated_at")+1;if(updatedCol)idem.getRange(markerRow,updatedCol).setValue(new Date());
+      throw error;
+    }
   });
 }
 
-function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason){
-  return erpUpdateCalendarEvent(eventId,"single",occurrenceStart,{status:"cancelled"},reason||"Cancelled occurrence");
+function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason,requestKey){
+  return erpUpdateCalendarEvent(eventId,"single",occurrenceStart,{status:"cancelled"},reason||"Cancelled occurrence",requestKey);
 }
 
 /** Explicitly create a task from an event occurrence; assignment remains separate. */
-function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt){
+function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt,requestKey){
+  if(!requestKey)throw new Error("A stable calendar-task request key is required.");
   const event=erpGetRecord_("CalendarEvents",eventId);
   if(!title)throw new Error("Task title is required.");
   const occurrence=occurrenceStart?erpCalDate_(occurrenceStart):erpCalDate_(event.start_at);
@@ -291,7 +328,7 @@ function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt){
     task_type:"event_follow_up",priority:"normal",status:"ready",
     planned_start:erpCalDateOnly_(occurrence),due_at:dueAt||erpCalDateOnly_(occurrence),
     created_by:erpActor_()
-  });
+  },requestKey);
   return {ok:true,task:task.record,eventId:eventId,assignmentCreated:false};
 }
 
