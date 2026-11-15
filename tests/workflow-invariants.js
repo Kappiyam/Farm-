@@ -122,5 +122,13 @@ throws(()=>context.erpUpdateTaskStatus("T-1","completed","invalid jump"),"Planne
 context.erpUpdateTaskStatus("T-1","assigned","valid transition");
 assert(rows("Tasks")[0].status==="assigned","Valid task transition should persist.");
 
+
+// Crop task generation must remain duplicate-safe when the same cycle is generated twice.
+seed("CropCycles",{crop_cycle_id:"CC-1",farm_id:"F-1",crop_id:"CR-1",planting_date:"2026-11-01",status:"active"});
+seed("TaskTemplates",{template_id:"TT-1",farm_id:"F-1",crop_id:"CR-1",template_name:"First field check",task_type:"scouting",offset_days:7,default_priority:"normal",status:"active"});
+context.erpGenerateCropTasks("CC-1");
+context.erpGenerateCropTasks("CC-1");
+assert(rows("Tasks").filter(t=>String(t.crop_cycle_id)==="CC-1").length===1,"Repeated crop task generation must not duplicate template tasks.");
+
 console.log("WORKFLOW INVARIANT TESTS PASSED");
 console.log("Checked cumulative procurement, same-lot fulfilment, idempotent replay, invoice/payment replay and task transitions.");
