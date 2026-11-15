@@ -249,6 +249,16 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(Math.abs(actual-g.expected)>tolerance)issue("ProcurementOrder",g.procurement_id,"Received line quantities do not match posted inventory receipt transactions.",g.expected,actual);
   });
 
+  erpReadTable_("StockLots").filter(inFarmIntegrity).forEach(function(lot){
+    var lotTransactions=inventory.filter(function(tx){return String(tx.lot_id)===String(lot.lot_id);});
+    if(lotTransactions.some(function(tx){return ["receipt","issue"].indexOf(String(tx.transaction_type))<0;}))return;
+    checks++;
+    var received=lotTransactions.filter(function(tx){return String(tx.transaction_type)==="receipt";}).reduce(function(sum,tx){return sum+(Number(tx.quantity)||0);},0);
+    var issued=lotTransactions.filter(function(tx){return String(tx.transaction_type)==="issue";}).reduce(function(sum,tx){return sum+(Number(tx.quantity)||0);},0);
+    var expected=received-issued,actual=Number(lot.quantity_available)||0;
+    if(Math.abs(expected-actual)>tolerance)issue("StockLot",lot.lot_id,"Available stock does not match receipt transactions less farm-use issues.",expected,actual);
+  });
+
   var harvestLines=erpReadTable_("HarvestLines").filter(inFarmIntegrity),produceLots=erpReadTable_("ProduceLots").filter(inFarmIntegrity);
   harvestLines.forEach(function(line){
     if(["sale","processing"].indexOf(String(line.disposition||"sale"))<0)return;
