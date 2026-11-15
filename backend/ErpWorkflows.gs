@@ -4,7 +4,7 @@
  */
 
 
-function erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference) {
+function erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference,requestKey) {
   var lot=erpFindByKey_("StockLots","lot_id",lotId);
   if(!lot||!erpActive_(lot.status))throw new Error("Active stock lot not found.");
   var item=erpFindByKey_("InventoryItems","item_id",lot.item_id);
@@ -21,14 +21,14 @@ function erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference) {
   erpUpdateByKey_("StockLots","lot_id",lotId,{quantity_available:remaining,status:remaining<=0.000001?"depleted":"active"});
   var transaction=erpAppend_("InventoryTransactions",{farm_id:lot.farm_id,item_id:lot.item_id,lot_id:lotId,
     transaction_type:"issue",quantity:qty,unit:lot.unit,transaction_at:new Date().toISOString(),
-    location_id:plotId||"",reference_type:"farm_use",reference_id:reference||plotId||lotId,
+    location_id:plotId||"",reference_type:"farm_use",reference_id:reference||requestKey||plotId||lotId,
     recorded_by:erpActor_(),notes:notes||""});
   return {ok:true,transaction:transaction,remaining:remaining,unit:lot.unit};
 }
 
 function erpIssueInventoryLot(lotId,quantity,plotId,notes,reference,requestKey) {
   return erpRunLockedWorkflow_("erpIssueInventoryLot",requestKey,function(){
-    return erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference);
+    return erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference,requestKey);
   });
 }
 
