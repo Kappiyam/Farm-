@@ -136,6 +136,7 @@ assert(rows("Payments").length===0,"Rejected payment attempts must not create pa
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 assert(rows("Payments").length===1,"Payment replay must not duplicate payment records.");
+throws(()=>context.erpRunLockedWorkflow_("differentAction","pay-once",function(){return {ok:true};}),"A request key must not be reusable for a different workflow action.");
 
 // State transitions must reject impossible jumps.
 seed("Tasks",{task_id:"T-1",farm_id:"F-1",status:"planned",title:"Test task"});
