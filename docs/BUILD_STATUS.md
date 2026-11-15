@@ -9,7 +9,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `5020b12` (current schema/version record and full CI suite passing)
+- Latest known work package: `6b48abe` (stock issue workflow and expanded reconciliation checks)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
