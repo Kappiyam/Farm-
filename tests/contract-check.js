@@ -42,6 +42,47 @@ const declared = new Set([...backend.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\
 const called = new Set([...app.matchAll(/\bcall\(["']([A-Za-z_$][\w$]*)["']/g)].map(m => m[1]));
 for (const name of called) check(declared.has(name), "Frontend calls missing backend function: " + name);
 
+function countTopLevelArgs(source) {
+  if (!source.trim()) return 0;
+  let count = 1, depth = 0, quote = "", escaped = false;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
+    if (c === "'" || c === '"' || c === "`") { quote = c; continue; }
+    if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === "," && depth === 0) count++;
+  }
+  return count;
+}
+function callSites(source) {
+  const sites = [];
+  const re = /\\bcall\\(["']([A-Za-z_$][\\w$]*)["'](\\s*,)?/g;
+  let match;
+  while ((match = re.exec(source))) {
+    let depth = 1, quote = "", escaped = false, end = re.lastIndex;
+    if (!match[2]) { sites.push({name:match[1],args:0}); continue; }
+    for (; end < source.length; end++) {
+      const c = source[end];
+      if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
+      if (c === "'" || c === '"' || c === "`") { quote = c; continue; }
+      if (c === "(") depth++;
+      if (c === ")" && --depth === 0) break;
+    }
+    sites.push({name:match[1],args:countTopLevelArgs(source.slice(re.lastIndex,end))});
+  }
+  return sites;
+}
+const parameterCounts = {};
+for (const match of backend.matchAll(/function\\s+([A-Za-z_$][\\w$]*)\\s*\\(([^)]*)\\)/g)) {
+  parameterCounts[match[1]] = countTopLevelArgs(match[2]);
+}
+for (const site of callSites(app)) {
+  check(site.args <= parameterCounts[site.name],
+    "Frontend passes " + site.args + " arguments to " + site.name + " but backend declares " + parameterCounts[site.name] + ".");
+}
+
+
 const schemaBlock = (sources["ErpSchema.gs"].match(/const ERP_TABLE_DEFINITIONS[\s\S]*?\n\}\);/) || [""])[0];
 const schemaTables = new Set([...schemaBlock.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9]*):/gm)].map(m => m[1]));
 const tableGroupBlock = (app.match(/const tableGroups\s*=\s*\{([\s\S]*?)\n \};/) || ["",""])[1];
