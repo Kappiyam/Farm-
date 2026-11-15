@@ -202,20 +202,32 @@ function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason) {
 
 function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,patch,reason) {
   var event=erpFindByKey_("CalendarEvents","event_id",eventId);if(!event)throw new Error("Calendar event not found.");
+  patch=patch||{};
   if(scope==="single"){
     var exception=erpReadTable_("CalendarExceptions").find(function(x){return String(x.event_id)===String(eventId)&&String(x.occurrence_start)===String(occurrenceStart);});
     var merged=Object.assign({},patch);
-    if(exception)erpUpdateByKey_("CalendarExceptions","calendar_exception_id",exception.calendar_exception_id,{exception_type:"override",override_json:JSON.stringify(merged),reason:reason||""});
+    if(exception)erpUpdateByKey_("CalendarExceptions","calendar_exception_id",exception.calendar_exception_id,{exception_type:"override",override_json:JSON.stringify(merged),reason:reason||"",created_at:new Date().toISOString()});
     else erpAppend_("CalendarExceptions",{event_id:eventId,occurrence_start:occurrenceStart,exception_type:"override",override_json:JSON.stringify(merged),reason:reason||""});
     return {ok:true,scope:scope};
   }
   if(scope==="future"){
-    var start=String(occurrenceStart).slice(0,10);
-    erpReadTable_("CalendarEvents").filter(function(e){return String(e.event_id)===String(eventId);});
-    patch.start_at=patch.start_at||event.start_at;
-    return {ok:true,scope:scope,note:"Future-series editing is recorded as a series-level update in this initial workflow.",updated:erpUpdateByKey_("CalendarEvents","event_id",eventId,Object.assign({},patch,{updated_at:new Date().toISOString()}))};
+    var occurrenceDate=String(occurrenceStart).slice(0,10);
+    var previous=new Date(occurrenceDate+"T00:00:00");
+    previous.setDate(previous.getDate()-1);
+    var previousDate=Utilities.formatDate(previous,Session.getScriptTimeZone(),"yyyy-MM-dd");
+    erpUpdateByKey_("CalendarEvents","event_id",eventId,{recurrence_end:previousDate,updated_at:new Date().toISOString()});
+    var split=Object.assign({},event,patch,{
+      event_id:Utilities.getUuid(),
+      start_at:patch.start_at||occurrenceStart,
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
+    });
+    delete split.event_id_original;
+    var created=erpAppend_("CalendarEvents",split);
+    return {ok:true,scope:scope,splitEvent:created};
   }
-  return {ok:true,scope:"series",updated:erpUpdateByKey_("CalendarEvents","event_id",eventId,Object.assign({},patch,{updated_at:new Date().toISOString()}))};
+  var updated=erpUpdateByKey_("CalendarEvents","event_id",eventId,Object.assign({},patch,{updated_at:new Date().toISOString()}));
+  return {ok:true,scope:"series",updated:updated};
 }
 
 function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt) {
