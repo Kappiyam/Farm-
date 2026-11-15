@@ -181,10 +181,10 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   Farms:["farm_code"],Sites:["farm_id","site_code"],Fields:["farm_id","field_code"],
   Plots:["field_id","plot_code"],Beds:["plot_id","bed_code"],Crops:["crop_name"],
   Varieties:["crop_id","variety_name"],Users:["email"],InventoryItems:["item_code"],
-  StockLots:["item_id","lot_code"],ProduceLots:["farm_id","lot_code"],Invoices:["generation_key"],
+  StockLots:["item_id","lot_code"],ProduceLots:["farm_id","lot_code"],Invoices:["invoice_number"],
   Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
   InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
-  Suppliers:["supplier_name","phone"],Products:["product_name","grade"],Invoices:["invoice_number"],
+  Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
   Tasks:["crop_cycle_id","template_id","due_at"],TaskAssignments:["task_id","person_id"],
   CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
 });
@@ -381,6 +381,11 @@ function erpValidateRecord_(table,record,id){
     const existing=erpRead_(table,{limit:1000}).rows;
     const duplicate=existing.find(r=>String(r[current])!==String(id)&&unique.every(f=>String(r[f]??"").trim().toLowerCase()===String(record[f]).trim().toLowerCase()));
     if(duplicate)throw new Error("A record with the same "+unique.map(label=>label.replace(/_/g," ")).join(" + ")+" already exists.");
+  }
+  if(table==="Invoices"&&record.generation_key){
+    const existing=erpRead_("Invoices",{limit:1000}).rows.find(r=>
+      String(r.invoice_id)!==String(id)&&String(r.generation_key||"")===String(record.generation_key));
+    if(existing)throw new Error("An invoice has already been created for this generation request.");
   }
   Object.keys(record).forEach(field=>{
     const value=record[field];
