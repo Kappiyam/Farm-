@@ -46,7 +46,7 @@ Last updated: 2026-11-15
 12. Added `docs/SECURITY_MODEL.md` defining the owner-only posture and the required server-side authorization work before worker access.
 16. Prepared `docs/ACCEPTANCE_TEST_PLAN.md` with disposable-spreadsheet scenarios, failure recovery, security checks and evidence requirements.
 8. Contract audit: all 26 frontend API calls resolve and their argument counts fit backend signatures; all 77 UI table references and all 36 lookup-map fields resolve to canonical schema columns, with duplicate keys and stale mappings rejected by CI; 81 canonical tables are defined in schema version `1.0.2`, including the new Attachments metadata table exposed in the Scouting workspace. CI also guards the Apps Script manifest to keep deployment owner-only.
-9. GitHub Actions passed on development commit `27ba728` (run `43713184704`, 2026-11-15): syntax/contract checks plus mocked Sheets-service workflow tests. The mutation API idempotency contract check also passed on `a5495b2` (run `43713180912`). These are not live Apps Script or real Google Sheets integration tests.
+9. GitHub Actions passed on development commit `35d49a1` (run `43713359934`, 2026-11-15): syntax/contract checks plus mocked Sheets-service workflow tests, including crop-task replay with both reused and distinct request keys. Mutation API idempotency contract checks passed on `a5495b2` (run `43713180912`). These are not live Apps Script or real Google Sheets integration tests.
 10. Added `docs/SMALL_PILOT_TEST_PLAN.md` with an isolated owner-only disposable-spreadsheet test sequence, recovery boundaries and evidence checklist.
 
 ## Known limitations and remaining work
