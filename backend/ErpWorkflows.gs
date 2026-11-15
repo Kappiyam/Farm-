@@ -306,8 +306,8 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(paid>(Number(invoice.total_amount)||0)+tolerance)issue("Invoice",invoice.invoice_id,"Recorded customer payments exceed invoice total.",Number(invoice.total_amount)||0,paid);
   });
   return {ok:issues.length===0,readOnly:true,issueCount:issues.length,checkCount:checks,issues:issues,
-    methodology:"Read-only comparisons across procurement receipt transactions, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances and invoice line totals. It reports inconsistencies for review and never changes source records.",
-    limitations:["This report does not repair records.","Produce-lot balance checks assume dispatch is the only movement type; lots with other movement types are excluded from that balance check.","It cannot guarantee that a multi-sheet write was atomic. Review source records before applying any correction."]};
+    methodology:"Read-only comparisons across procurement receipt transactions, stock-lot balances and issues, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances, invoice line totals and customer payments. It reports inconsistencies for review and never changes source records.",
+    limitations:["This report does not repair records.","Stock-lot balance checks support receipt and issue transaction types; lots with other movement types are excluded from that balance check.","Produce-lot balance checks assume dispatch is the only movement type; lots with other movement types are excluded from that balance check.","It cannot guarantee that a multi-sheet write was atomic. Review source records before applying any correction."]};
 }
 
 function erpReport(reportKey, filters) {
