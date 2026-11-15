@@ -272,7 +272,10 @@ function erpGetWorkflowIntegrityReport(farmId) {
   var fulfilGroups={};
   fulfilmentLines.forEach(function(line){
     var lot=produceLots.find(function(l){return String(l.produce_lot_id)===String(line.produce_lot_id);});
-    if(farmId&&(!lot||String(lot.farm_id)!==String(farmId)))return;
+    var order=erpFindByKey_("SalesOrders","sales_order_id",line.sales_order_id);
+    var lineFarm=lot?lot.farm_id:(order?order.farm_id:"");
+    if(farmId&&String(lineFarm)!==String(farmId))return;
+    if(!lot){checks++;issue("FulfilmentLine",line.fulfilment_line_id||line.fulfilment_id,"Fulfilment line references a missing produce lot.",1,0);return;}
     var key=String(line.fulfilment_id)+"|"+String(line.produce_lot_id);
     fulfilGroups[key]=(fulfilGroups[key]||0)+(Number(line.quantity)||0);
   });
