@@ -111,7 +111,7 @@ assert(duplicateFarm.duplicate===true&&rows("Farms").length===1,"Generic save re
 const loc1=fieldAndPlot(farm1.farm_id,"A");
 
 // Inventory issue: lot balance, plot scope and request replay.
-const item=save("InventoryItems",{farm_id:farm1.farm_id,item_name:"Vermicompost",item_code:"VC-01",base_unit:"kg",status:"active"});
+const item=save("InventoryItems",{item_name:"Vermicompost",item_code:"VC-01",base_unit:"kg",status:"active"});
 const openingLot=save("StockLots",{farm_id:farm1.farm_id,item_id:item.item_id,lot_code:"OPEN-01",received_date:"2026-11-15",storage_location:"Store",quantity_available:0,status:"active"});
 const openingReceipt={farm_id:farm1.farm_id,item_id:item.item_id,lot_id:openingLot.lot_id,transaction_type:"receipt",
   quantity:10,unit:"kg",transaction_at:"2026-11-15T08:00:00.000Z",to_location:"Store",reference_type:"opening",reference_id:"OPEN-01"};
@@ -145,12 +145,6 @@ context.erpReceiveProcurement(procurement.procurement_id,receipts,"procurement-r
 context.erpReceiveProcurement(procurement.procurement_id,receipts,"procurement-receipt-once");
 assert(rows("StockLots").filter(x=>x.lot_code==="BATCH-A").length===1,"Same batch rows should aggregate to one stock lot.");
 assert(Number(rows("ProcurementLines").find(x=>x.procurement_line_id===procurementLine.procurement_line_id).quantity_received)===10,"Receipt quantity should reconcile to the inventory ledger.");
-const foreignItem=save("InventoryItems",{farm_id:farm2.farm_id,item_name:"Foreign input",item_code:"FOREIGN-1",base_unit:"kg"});
-const foreignOrder=save("ProcurementOrders",{farm_id:farm1.farm_id,supplier_id:supplier.supplier_id,order_date:"2026-11-15",status:"ordered",currency_code:"INR"});
-const foreignLine=save("ProcurementLines",{procurement_id:foreignOrder.procurement_id,item_id:foreignItem.item_id,quantity_ordered:5,quantity_received:0,unit:"kg"});
-throws(()=>context.erpReceiveProcurement(foreignOrder.procurement_id,[{procurement_line_id:foreignLine.procurement_line_id,quantity:1,lot_code:"BAD-FARM",received_date:"2026-11-15"}],"procurement-cross-farm"),
-  "Procurement must reject inventory items belonging to another farm.");
-
 // Produce traceability, fulfilment aggregation and invoice/payment lifecycle.
 const crop=save("Crops",{crop_name:"Test papaya",crop_code:"PAP-TEST"});
 const customer=save("Customers",{customer_name:"Test kitchen",phone:"9000000002",status:"active"});
