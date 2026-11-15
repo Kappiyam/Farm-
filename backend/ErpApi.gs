@@ -259,6 +259,7 @@ function erpAppend_(name,record){
   var key=ERP_TABLE_KEYS[name];if(!clean[key])clean[key]=Utilities.getUuid();
   var now=new Date().toISOString();if(schema.indexOf("created_at")>=0&&!clean.created_at)clean.created_at=now;if(schema.indexOf("updated_at")>=0)clean.updated_at=now;
   s.appendRow(headers.map(function(h){return clean[h]===undefined?"":clean[h];}));
+  if(typeof ERP_WORKFLOW_TRACKING!=="undefined"&&ERP_WORKFLOW_TRACKING)ERP_WORKFLOW_WRITE_COUNT++;
   erpAudit_(name,clean[key],"create",clean);return clean;
 }
 function erpFindByKey_(name,key,id){return erpReadTable_(name).find(function(r){return String(r[key])===String(id);})||null;}
