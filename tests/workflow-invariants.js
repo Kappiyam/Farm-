@@ -152,7 +152,7 @@ const product=save("Products",{product_name:"Papaya",base_unit:"kg",crop_id:crop
 const salesOrder=save("SalesOrders",{farm_id:farm1.farm_id,customer_id:customer.customer_id,order_date:"2026-11-15",
   order_number:"SO-TEST-01",currency_code:"INR",status:"confirmed"});
 const salesLine=save("SalesOrderLines",{sales_order_id:salesOrder.sales_order_id,product_id:product.product_id,
-  quantity_ordered:10,quantity_fulfilled:0,unit:"kg",unit_price:10,tax_rate:0,description:"Papaya grade A"});
+  quantity_ordered:10,quantity_fulfilled:0,unit:"kg",unit_price:10,description:"Papaya grade A"});
 const produceLot=save("ProduceLots",{farm_id:farm1.farm_id,crop_id:crop.crop_id,lot_code:"PRODUCE-01",
   quantity_available:0,unit:"kg",status:"active"});
 context.erpPostLedger("ProduceLotMovements",{produce_lot_id:produceLot.produce_lot_id,movement_type:"receipt",
