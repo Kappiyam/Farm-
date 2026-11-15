@@ -1,0 +1,22 @@
+name: FarmERP contract checks
+
+on:
+  push:
+    branches: [feature/farmerp-complete-build]
+  pull_request:
+    branches: [foundation/bootstrap]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check frontend/backend contracts and JavaScript syntax
+        run: node tests/contract-check.js
