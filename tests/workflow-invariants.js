@@ -65,7 +65,7 @@ vm.createContext(context);
 for(const file of ["Code.gs","ErpSchema.gs","ErpApi.gs","ErpWorkflows.gs"]){
   vm.runInContext(fs.readFileSync(path.join(root,"backend",file),"utf8"),context,{filename:file});
 }
-for(const [name,definition] of Object.entries(context.ERP_TABLE_DEFINITIONS)){
+for(const [name,definition] of Object.entries(vm.runInContext('ERP_TABLE_DEFINITIONS',context))){
   const sheet=new FakeSheet(name,definition.split("|"));
   ss.sheets[name]=sheet;
 }
