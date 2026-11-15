@@ -1,6 +1,6 @@
 # FarmERP build status
 
-Last updated: 2026-11-15
+Last updated: 2026-11-15 (continued development)
 
 ## Working branch
 
@@ -38,8 +38,9 @@ The user-facing acceptance cycle is consolidated: complete the integrated applic
 
 ## Current known gaps / next work packages
 
-1. Run automated syntax and frontend/backend contract checks; add CI so a partial commit cannot silently break the source.
-2. Audit every frontend call signature and every field name against backend functions and table schemas. Correct mismatches before deployment.
+1. Initial static syntax validation now passes for Code.gs, ErpSchema.gs, ErpApi.gs, ErpWorkflows.gs and the App.html inline script. One malformed calendar schema line was found and corrected in a separate commit.
+2. Initial API name check: all 26 distinct frontend API call names now resolve to backend functions. Full argument/return-shape and field-level contract audit is still pending.
+3. GitHub Actions workflow is committed; a successful hosted CI run has not yet been confirmed.
 3. Add transaction locks and stronger validation around multi-sheet workflows; add rollback/compensation strategy where Apps Script cannot provide atomic transactions.
 4. Complete role/permission enforcement and establish a safe owner/worker authentication model before changing web-app access from MYSELF.
 5. Improve first-run setup UX for organisation, farm, owner and role records.
