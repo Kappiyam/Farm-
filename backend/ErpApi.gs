@@ -228,8 +228,16 @@ function erpCreateTaskFromObservation(observationId, title, dueAt, priority) {
 }
 
 function erpPostLedgerUnlocked_(tableName, record, requestKey) {
-  if(ERP_LEDGER_TABLES.indexOf(tableName)<0)throw new Error("Unsupported ledger table.");
-  var saved=erpAppend_(tableName,record||{});
+  if(ERP_LEDGER_TABLES.indexOf(tableName)<0||ERP_WORKFLOW_TABLES.indexOf(tableName)>=0)throw new Error("Unsupported or workflow-managed ledger table.");
+  record=record||{};
+  var schema=ERP_TABLE_DEFINITIONS[tableName].split("|");
+  Object.keys(record).forEach(function(k){if(schema.indexOf(k)<0)throw new Error("Unsupported field '"+k+"' for "+tableName+".");});
+  var required=erpGetSchema().required[tableName]||[];
+  required.forEach(function(k){if(record[k]===undefined||String(record[k]).trim()==="")throw new Error(k+" is required.");});
+  if(["FinanceEntries","WageTransactions"].indexOf(tableName)>=0&&(!(Number(record.amount)>0)||!isFinite(Number(record.amount))))throw new Error("Ledger amount must be a positive number.");
+  if(tableName==="WageTransactions"&&(!record.person_id||!record.transaction_date))throw new Error("Wage transactions require a person and transaction date.");
+  if(tableName==="Attendance"&&(!record.farm_id||!record.person_id||!record.attendance_date||!record.attendance_status))throw new Error("Attendance requires farm, person, date and status.");
+  var saved=erpAppend_(tableName,record);
   var result={ok:true,record:saved};return result;
 }
 
