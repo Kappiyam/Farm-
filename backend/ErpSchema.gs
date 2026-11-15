@@ -127,7 +127,8 @@ function erpGetSchema() {
       InventoryItems: ["farm_id","item_name","base_unit"],
       SalesOrders: ["farm_id","customer_id","order_date"],
       SalesOrderLines: ["sales_order_id","product_id","quantity_ordered"],
-      FinanceEntries: ["farm_id","entry_date","entry_type","amount"]
+      FinanceEntries: ["farm_id","entry_date","entry_type","amount"],
+      Attachments: ["farm_id","entity_type","entity_id","file_id","file_name"]
     },
     archivable: ERP_ARCHIVABLE_TABLES.slice()
   };
