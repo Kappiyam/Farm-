@@ -186,7 +186,10 @@ assert(rows("TaskStatusHistory").length===historyCount,"Repeated identical task 
 
 // Assignment and execution records must also replay without duplication.
 seed("People",{person_id:"P-1",display_name:"Test worker",status:"active"});
+seed("People",{person_id:"P-2",display_name:"Unassigned worker",status:"active"});
 seed("Teams",{team_id:"TEAM-1",farm_id:"F-1",team_name:"Field crew",status:"active"});
+seed("TeamMembers",{team_member_id:"TM-1",farm_id:"F-1",team_id:"TEAM-1",person_id:"P-1",status:"active"});
+throws(()=>context.erpAssignTask("T-1",[{person_id:"P-2"}],"assign-nonmember"),"Workers outside the task farm must not be assigned.");
 context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
 context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
 assert(rows("TaskAssignments").filter(x=>String(x.task_id)==="T-1").length===2,"Assignment replay must not duplicate person/team assignments.");
