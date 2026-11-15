@@ -64,7 +64,10 @@ const workflowLocks = [
   ["ErpApi.gs","erpUpdateTaskStatus"],
   ["ErpApi.gs","erpAssignTask"],
   ["ErpApi.gs","erpRecordTaskExecution"],
-  ["ErpApi.gs","erpPostLedger"]
+  ["ErpApi.gs","erpPostLedger"],
+  ["ErpApi.gs","erpGenerateCropTasks"],
+  ["ErpWorkflows.gs","erpCancelCalendarOccurrence"],
+  ["ErpWorkflows.gs","erpUpdateCalendarEvent"]
 ];
 for (const [file,name] of workflowLocks) {
   const body = bodyOf(sources[file], name);
