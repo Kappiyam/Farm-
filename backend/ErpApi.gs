@@ -267,7 +267,9 @@ function erpUpdateByKey_(name,key,id,patch){
   if(idx<0)throw new Error("Primary key column is missing for "+name+".");
   for(var i=1;i<v.length;i++)if(String(v[i][idx])===String(id)){
     Object.keys(patch).forEach(function(k){var c=h.indexOf(k);if(c>=0)v[i][c]=patch[k];});
-    s.getRange(i+1,1,1,h.length).setValues([v[i]]);return erpFindByKey_(name,key,id);
+    s.getRange(i+1,1,1,h.length).setValues([v[i]]);
+    if(typeof ERP_WORKFLOW_TRACKING!=="undefined"&&ERP_WORKFLOW_TRACKING)ERP_WORKFLOW_WRITE_COUNT++;
+    return erpFindByKey_(name,key,id);
   }
   throw new Error("Record not found in "+name+".");
 }
