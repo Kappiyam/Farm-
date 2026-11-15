@@ -3,12 +3,11 @@
  * All writes are serialised with a script lock and recorded in AuditLog.
  */
 const ERP_LEDGER_TABLES = Object.freeze([
-  "InventoryTransactions","FinanceEntries","Payments","WageTransactions",
-  "TaskExecution","HarvestLines","Attendance","IrrigationOperations"
+  "FinanceEntries","WageTransactions","Attendance","IrrigationOperations"
 ]);
 const ERP_WORKFLOW_TABLES = Object.freeze([
   "HarvestLines","ProduceLotMovements","FulfilmentLines","InvoiceLines",
-  "Payments","IdempotencyKeys","AuditLog"
+  "Payments","InventoryTransactions","TaskExecution","IdempotencyKeys","AuditLog"
 ]);
 
 function erpBootstrap() {
