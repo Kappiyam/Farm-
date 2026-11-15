@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `d34d766` (payment validation and all current automated checks passing)
+- Latest known work package: `fdc1c8f` (security and worker-access release constraints documented)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -32,7 +32,9 @@ Last updated: 2026-11-15
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation, including no-op handling for repeated identical status updates.
 10. Generic saves reject unknown fields and unknown caller-supplied primary keys; customer payments validate date, method, invoice state and farm payment-account scope.
-8. Contract audit: all 26 frontend API calls resolve and their argument counts fit backend signatures; all 77 UI table references and all 43 lookup-map entries resolve to the canonical schema; 80 canonical tables are defined. CI also guards the Apps Script manifest to keep deployment owner-only. Latest run on `d34d766` passed.
+11. Added an Attachments metadata table and Scouting workspace entry. Binary upload/storage integration is not yet implemented.
+12. Added `docs/SECURITY_MODEL.md` defining the owner-only posture and the required server-side authorization work before worker access.
+8. Contract audit: all 26 frontend API calls resolve and their argument counts fit backend signatures; all 77 UI table references and all 43 lookup-map entries resolve to the canonical schema; 81 canonical tables are defined, including the new Attachments metadata table exposed in the Scouting workspace. CI also guards the Apps Script manifest to keep deployment owner-only. Latest workflow checks passed on `20fad92`; the current branch head contains documentation-only changes after that passing run.
 9. GitHub Actions passed on commit `b4a4f06`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines, same-lot fulfilment aggregation, idempotent receipt/fulfilment/invoice/payment replay, task status transitions and duplicate-safe crop-task generation. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
 
 ## Known limitations and remaining work
