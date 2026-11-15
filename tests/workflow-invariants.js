@@ -160,5 +160,20 @@ context.erpGenerateCropTasks("CC-1");
 context.erpGenerateCropTasks("CC-1");
 assert(rows("Tasks").filter(t=>String(t.crop_cycle_id)==="CC-1").length===1,"Repeated crop task generation must not duplicate template tasks.");
 
+// Schema migration must remain additive and preserve existing row data.
+const siteHeaders=vm.runInContext('ERP_TABLE_DEFINITIONS',context).Sites.split("|");
+const oldSites=new FakeSheet("Sites",siteHeaders.slice(0,-1));
+oldSites.appendRow(siteHeaders.slice(0,-1).map(h=>h==="site_id"?"SITE-OLD":h==="site_name"?"Existing site":""));
+ss.sheets.Sites=oldSites;
+delete ss.sheets.Attachments;
+const migrationPreview=context.erpPreviewSchemaMigration();
+assert(migrationPreview.createTabs.some(x=>x.table==="Attachments"),"Migration preview must identify a missing canonical tab.");
+assert(migrationPreview.appendColumns.some(x=>x.table==="Sites"),"Migration preview must identify missing trailing columns.");
+context.erpInstallSchema();
+assert(ss.getSheetByName("Attachments")!==null,"Additive migration must create a missing canonical tab.");
+assert(ss.getSheetByName("Sites").getDataRange().getValues()[1][0]==="SITE-OLD","Additive migration must preserve existing site records.");
+const afterMigration=context.erpPreviewSchemaMigration();
+assert(afterMigration.createTabs.length===0&&afterMigration.appendColumns.length===0,"Second migration preview should be clean after additive installation.");
+
 console.log("WORKFLOW INVARIANT TESTS PASSED");
 console.log("Checked cumulative procurement, same-lot fulfilment, idempotent replay, invoice/payment replay and task transitions.");
