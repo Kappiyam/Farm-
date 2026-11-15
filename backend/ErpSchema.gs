@@ -41,7 +41,7 @@ const ERP_TABLE_DEFINITIONS = Object.freeze({
   TaskTemplates: "template_id|farm_id|template_name|crop_id|variety_id|task_type|description|default_priority|offset_days|duration_days|checklist|status|created_at|updated_at",
   Tasks: "task_id|farm_id|site_id|field_id|plot_id|bed_id|crop_cycle_id|template_id|title|description|task_type|priority|status|planned_start|due_at|assigned_team|created_by|created_at|updated_at",
   TaskAssignments: "assignment_id|farm_id|task_id|person_id|team_id|assignment_role|assigned_by|assigned_at|status|notes",
-  TaskExecution: "execution_id|farm_id|task_id|person_id|team_id|executed_at|quantity|unit|area_covered|duration_minutes|output_notes|quality_status|recorded_by|created_at",
+  TaskExecution: "execution_id|farm_id|task_id|person_id|team_id|executed_at|started_at|completed_at|contribution_percent|quantity|quantity_unit|area|area_unit|duration_minutes|output_notes|notes|quality_status|recorded_by|created_at",
   TaskStatusHistory: "status_history_id|farm_id|task_id|from_status|to_status|changed_by|changed_at|reason",
   Attendance: "attendance_id|farm_id|person_id|attendance_date|check_in|check_out|attendance_status|hours_worked|recorded_by|notes|created_at",
   WageTransactions: "wage_transaction_id|farm_id|person_id|task_id|attendance_id|transaction_date|wage_basis|quantity|rate|amount|payment_status|payment_reference|notes|created_at",
