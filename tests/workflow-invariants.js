@@ -105,6 +105,8 @@ throws(()=>context.erpRunLockedWorkflow_("testPartialWrite","partial-write-key",
 assert(rows("ActivityJournal").length===journalBefore+1,"A failed request retry must not append duplicate data.");
 
 // Procurement: repeated input lines must be summed before any write.
+seed("Suppliers",{supplier_id:"S-1",farm_id:"F-1",supplier_name:"Test supplier",status:"active"});
+seed("InventoryItems",{item_id:"I-1",farm_id:"F-1",item_name:"Test input",status:"active"});
 seed("ProcurementOrders",{procurement_id:"PO-1",farm_id:"F-1",supplier_id:"S-1",status:"ordered"});
 seed("ProcurementLines",{procurement_line_id:"POL-1",procurement_id:"PO-1",farm_id:"F-1",item_id:"I-1",quantity_ordered:10,quantity_received:0,unit:"kg",unit_cost:5});
 throws(()=>context.erpReceiveProcurement("PO-1",[
