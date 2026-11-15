@@ -20,3 +20,5 @@ jobs:
           node-version: "22"
       - name: Check frontend/backend contracts and JavaScript syntax
         run: node tests/contract-check.js
+      - name: Exercise workflow invariants with mocked Sheets services
+        run: node tests/workflow-invariants.js
