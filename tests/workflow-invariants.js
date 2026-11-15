@@ -81,6 +81,7 @@ function throws(fn,message){let did=false;try{fn();}catch(e){did=true;}assert(di
 throws(()=>context.erpPostLedger("Payments",{farm_id:"F-1",amount:1}),"Payments must use the invoice payment workflow.");
 throws(()=>context.erpPostLedger("InventoryTransactions",{farm_id:"F-1",quantity:1}),"Inventory transactions must use a stock workflow.");
 throws(()=>context.erpPostLedger("TaskExecution",{farm_id:"F-1",quantity:1}),"Task execution must use the task execution workflow.");
+throws(()=>context.erpSave("StockLots",{farm_id:"F-1",item_id:"I-1",quantity_available:999}),"Stock lots must only be modified by inventory workflows.");
 
 // Safe direct ledger entries remain validated and append-only.
 throws(()=>context.erpPostLedger("FinanceEntries",{farm_id:"F-1",entry_date:"2026-11-15",entry_type:"expense",amount:-10}),"Negative finance amounts must be rejected.");
