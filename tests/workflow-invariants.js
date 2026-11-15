@@ -120,6 +120,13 @@ context.erpReceiveProcurement("PO-1",receipts,"po-once");
 assert(rows("StockLots").length===2,"Procurement request replay must not duplicate lots.");
 assert(Number(rows("ProcurementLines")[0].quantity_received)===10,"Repeated receipt rows must cumulatively update received quantity.");
 
+seed("InventoryItems",{item_id:"I-OTHER",farm_id:"F-2",item_name:"Other farm input",status:"active"});
+seed("ProcurementOrders",{procurement_id:"PO-2",farm_id:"F-1",supplier_id:"S-1",status:"ordered"});
+seed("ProcurementLines",{procurement_line_id:"POL-2",procurement_id:"PO-2",farm_id:"F-1",item_id:"I-OTHER",quantity_ordered:5,quantity_received:0,unit:"kg"});
+throws(()=>context.erpReceiveProcurement("PO-2",[{procurement_line_id:"POL-2",quantity:1,lot_code:"WRONG-FARM"}],"po-wrong-item-farm"),"Inventory items from another farm must be rejected.");
+assert(rows("StockLots").length===2,"Cross-farm procurement item must not create stock lots.");
+
+
 // Fulfilment: repeated references to one lot must be aggregated before availability validation.
 seed("SalesOrders",{sales_order_id:"SO-1",farm_id:"F-1",customer_id:"C-1",status:"confirmed",currency_code:"INR"});
 seed("Products",{product_id:"P-1",product_name:"Test produce",crop_id:"CR-1"});
