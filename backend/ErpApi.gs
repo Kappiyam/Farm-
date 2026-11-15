@@ -207,7 +207,7 @@ function erpPreviewCropTasks(cropCycleId) {
   return {ok:true,cycleName:cycle.cycle_name||cycleCycleName_(cycle),plannedCount:tasks.length,existingCount:tasks.filter(function(t){return t.already_exists;}).length,tasks:tasks,notice:"Review the proposed dates before generating planned tasks. Existing matching tasks are skipped."};
 }
 
-function erpGenerateCropTasks(cropCycleId) {
+function erpGenerateCropTasksUnlocked_(cropCycleId) {
   var preview=erpPreviewCropTasks(cropCycleId),cycle=preview.cropCycle||erpFindByKey_("CropCycles","crop_cycle_id",cropCycleId);
   var created=[],skipped=0;
   preview.tasks.forEach(function(t){
@@ -287,3 +287,5 @@ function erpAssignTask(taskId,assignments,requestKey){return erpRunLockedWorkflo
 function erpRecordTaskExecution(taskId,entries,requestKey){return erpRunLockedWorkflow_("erpRecordTaskExecution",requestKey,function(){return erpRecordTaskExecutionUnlocked_(taskId,entries,null);});}
 
 function erpPostLedger(tableName,record,requestKey){return erpRunLockedWorkflow_("erpPostLedger",requestKey,function(){return erpPostLedgerUnlocked_(tableName,record,null);});}
+
+function erpGenerateCropTasks(cropCycleId,requestKey){return erpRunLockedWorkflow_("erpGenerateCropTasks",requestKey,function(){return erpGenerateCropTasksUnlocked_(cropCycleId);});}
