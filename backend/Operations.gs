@@ -54,8 +54,6 @@ function erpIssueInventoryLot(lotId,quantity,plotId,notes,reference,requestKey){
   if(["inactive","depleted","closed"].includes(String(lot.status||"").toLowerCase()))
     throw new Error("The selected stock lot is not active.");
   const item=erpGetRecord_("InventoryItems",lot.item_id);
-  if(String(item.farm_id)!==String(lot.farm_id))
-    throw new Error("Stock item does not belong to the lot's farm.");
   const qty=Number(quantity);
   if(!(qty>0)||!isFinite(qty))throw new Error("Issue quantity must be greater than zero.");
   if(plotId){
