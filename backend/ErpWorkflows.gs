@@ -195,13 +195,13 @@ function erpCalculateProductionGap(farmId,startDate,endDate) {
  * This diagnoses inconsistencies; it does not modify or auto-correct records.
  */
 function erpGetWorkflowIntegrityReport(farmId) {
-  function inFarm(row){return !farmId||String(row.farm_id)===String(farmId);}
+  function inFarmIntegrity(row){return !farmId||String(row.farm_id)===String(farmId);}
   function issue(type,id,description,expected,actual){
     issues.push({entity_type:type,entity_id:id,issue:description,expected:expected,actual:actual});
   }
   var issues=[],checks=0,tolerance=0.000001;
-  var procurementLines=erpReadTable_("ProcurementLines").filter(inFarm);
-  var inventory=erpReadTable_("InventoryTransactions").filter(inFarm);
+  var procurementLines=erpReadTable_("ProcurementLines").filter(inFarmIntegrity);
+  var inventory=erpReadTable_("InventoryTransactions").filter(inFarmIntegrity);
   var procurementGroups={};
   procurementLines.forEach(function(line){
     var key=String(line.procurement_id)+"|"+String(line.item_id);
@@ -216,7 +216,7 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(Math.abs(actual-g.expected)>tolerance)issue("ProcurementOrder",g.procurement_id,"Received line quantities do not match posted inventory receipt transactions.",g.expected,actual);
   });
 
-  var harvestLines=erpReadTable_("HarvestLines").filter(inFarm),produceLots=erpReadTable_("ProduceLots").filter(inFarm);
+  var harvestLines=erpReadTable_("HarvestLines").filter(inFarmIntegrity),produceLots=erpReadTable_("ProduceLots").filter(inFarmIntegrity);
   harvestLines.forEach(function(line){
     if(["sale","processing"].indexOf(String(line.disposition||"sale"))<0)return;
     checks++;
@@ -224,7 +224,7 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(count!==1)issue("HarvestLine",line.harvest_line_id,"Sale/processing harvest line must have exactly one produce lot.",1,count);
   });
 
-  var fulfilmentLines=erpReadTable_("FulfilmentLines"),movements=erpReadTable_("ProduceLotMovements").filter(inFarm);
+  var fulfilmentLines=erpReadTable_("FulfilmentLines"),movements=erpReadTable_("ProduceLotMovements").filter(inFarmIntegrity);
   var fulfilGroups={};
   fulfilmentLines.forEach(function(line){
     var lot=produceLots.find(function(l){return String(l.produce_lot_id)===String(line.produce_lot_id);});
@@ -250,7 +250,7 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(Math.abs(expected-actual)>tolerance)issue("ProduceLot",lot.produce_lot_id,"Available lot quantity does not match received quantity less recorded dispatches.",expected,actual);
   });
 
-  var invoices=erpReadTable_("Invoices").filter(inFarm),invoiceLines=erpReadTable_("InvoiceLines");
+  var invoices=erpReadTable_("Invoices").filter(inFarmIntegrity),invoiceLines=erpReadTable_("InvoiceLines");
   invoices.forEach(function(invoice){
     checks++;
     var lines=invoiceLines.filter(function(line){return String(line.invoice_id)===String(invoice.invoice_id);});
