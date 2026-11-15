@@ -187,6 +187,11 @@ assert(calendarAfter.some(x=>x.occurrence_start===calendarInitial[1].occurrence_
 
 const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
+
+seed("InventoryTransactions",{transaction_id:"TX-ORPHAN",farm_id:"F-1",item_id:"I-1",lot_id:firstStockLot.lot_id,transaction_type:"issue",quantity:1,unit:"kg",transaction_at:"2026-11-15",reference_type:"test",reference_id:"orphan"});
+const stockMismatch=context.erpGetWorkflowIntegrityReport("F-1");
+assert(stockMismatch.issues.some(x=>x.entity_type==="StockLot"&&x.entity_id===firstStockLot.lot_id),"Integrity report must detect stock-lot balance mismatches.");
+
 seed("Payments",{payment_id:"PAY-OVER",farm_id:"F-1",invoice_id:invoice.invoice_id,customer_id:"C-1",amount:1,payment_date:"2026-11-15",payment_method:"cash"});
 const overpaidIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(overpaidIntegrity.issues.some(x=>x.entity_type==="Invoice"&&x.issue.indexOf("payments exceed")>=0),"Integrity report must detect invoice overpayment.");
