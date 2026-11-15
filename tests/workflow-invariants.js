@@ -151,6 +151,14 @@ context.erpFulfilSalesOrder("SO-1","FUL-ONCE",fulfilLines,"2026-11-15","ful-once
 assert(rows("FulfilmentLines").length===2,"Fulfilment request replay must not duplicate fulfilment lines.");
 assert(Number(rows("ProduceLots")[0].quantity_available)===0,"Fulfilment must deduct aggregated lot quantity once.");
 
+seed("SalesOrders",{sales_order_id:"SO-2",farm_id:"F-1",customer_id:"C-1",status:"confirmed",currency_code:"INR"});
+seed("SalesOrderLines",{sales_line_id:"SOL-2",sales_order_id:"SO-2",product_id:"P-MISSING",quantity_ordered:1,unit:"kg",unit_price:1,tax_rate:0});
+seed("ProduceLots",{produce_lot_id:"PL-2",farm_id:"F-1",crop_id:"",unit:"kg",quantity_received:1,quantity_available:1,status:"active"});
+const fulfilmentCountBeforeMissingProduct=rows("Fulfilments").length;
+throws(()=>context.erpFulfilSalesOrder("SO-2","FUL-MISSING",[{sales_line_id:"SOL-2",produce_lot_id:"PL-2",quantity:1}],"2026-11-15","ful-missing-product"),"Sales fulfilment must reject missing products.");
+assert(rows("Fulfilments").length===fulfilmentCountBeforeMissingProduct,"Rejected missing-product fulfilment must not create a fulfilment.");
+
+
 // Invoice and payment: request replay must not create duplicate financial records.
 const invoiceResult=context.erpCreateInvoiceFromOrder("SO-1","2026-12-15","inv-once");
 context.erpCreateInvoiceFromOrder("SO-1","2026-12-15","inv-once");
