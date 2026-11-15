@@ -235,15 +235,15 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason,req
     const merged=Object.assign({},prior&&prior.overrides_json?JSON.parse(prior.overrides_json):{},changes);
     if(merged.start_at&&merged.end_at&&erpCalDate_(merged.end_at)<erpCalDate_(merged.start_at))
       throw new Error("Event end must not be before its start.");
-    if(prior){
-      const saved=erpSave("CalendarEventOverrides",{override_id:prior.override_id,
-        event_id:eventId,occurrence_start:erpCalKey_(occurrence),action:"update",
-        overrides_json:JSON.stringify(merged),reason:reason||"",updated_at:new Date()},requestKey);
-      return {ok:true,scope:scope,override:saved.record};
-    }
-    const saved=erpSave("CalendarEventOverrides",{event_id:eventId,occurrence_start:erpCalKey_(occurrence),
-      action:"update",overrides_json:JSON.stringify(merged),reason:reason||"",created_by:erpActor_()},requestKey);
-    return {ok:true,scope:scope,override:saved.record};
+    const stableId="OVR-"+Utilities.base64Encode(Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,String(requestKey),Utilities.Charset.UTF_8)).replace(/[^A-Za-z0-9]/g,"").slice(0,24);
+    const saved=erpSave("CalendarEventOverrides",{
+      override_id:prior?prior.override_id:stableId,
+      event_id:eventId,occurrence_start:erpCalKey_(occurrence),action:"update",
+      overrides_json:JSON.stringify(merged),reason:reason||"",
+      created_by:prior&&prior.created_by?prior.created_by:erpActor_()
+    },requestKey);
+    return {ok:true,scope:scope,override:saved.record,duplicate:!!saved.duplicate};
   }
   return erpWithLock_(()=>{
     const ss=SpreadsheetApp.getActiveSpreadsheet(),idem=ss.getSheetByName("IdempotencyKeys");
