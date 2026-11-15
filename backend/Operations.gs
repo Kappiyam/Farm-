@@ -99,9 +99,12 @@ function erpReceiveProcurement(procurementId,receipts,requestKey){
     const groupKey=String(line.procurement_line_id)+"|"+lotCode;
     if(!grouped[groupKey])grouped[groupKey]=Object.assign({},r,{procurement_line_id:line.procurement_line_id,quantity:0,lot_code:lotCode});
     grouped[groupKey].quantity+=qty;
-    requestedByLine[line.procurement_line_id]=(requestedByLine[line.procurement_line_id]||0)+qty;
+    const requestReceiptKey=requestKey+":"+line.procurement_line_id+":"+lotCode;
+    const alreadyPosted=postedKeys.has(requestReceiptKey);
+    if(!alreadyPosted)requestedByLine[line.procurement_line_id]=(requestedByLine[line.procurement_line_id]||0)+qty;
   });
   const inventoryBefore=erpRead_("InventoryTransactions",{limit:1000}).rows;
+  const postedKeys=new Set(inventoryBefore.map(t=>String(t.idempotency_key||"")));
   Object.keys(requestedByLine).forEach(lineId=>{
     const line=erpGetRecord_("ProcurementLines",lineId);
     const alreadyReceived=inventoryBefore.filter(t=>String(t.reference_type)==="ProcurementLine"&&
@@ -376,6 +379,17 @@ function erpRecordCustomerPayment(invoiceId,payment,idempotencyKey){
   if(!idempotencyKey)throw new Error("A stable payment request key is required.");
   if(!payment||typeof payment!=="object")throw new Error("Payment details are required.");
   const invoice=erpGetRecord_("Invoices",invoiceId);
+  const paymentDate=String(payment.payment_date||"");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)||isNaN(new Date(paymentDate+"T00:00:00").getTime())||
+    new Date(paymentDate+"T00:00:00").toISOString().slice(0,10)!==paymentDate)
+    throw new Error("Payment date must be a valid calendar date in YYYY-MM-DD format.");
+  const allowedMethods=["upi","bank_transfer","cash","cheque","card","other"];
+  if(!allowedMethods.includes(String(payment.payment_method||"").toLowerCase()))
+    throw new Error("Unsupported payment method.");
+  if(payment.account_id){
+    const account=erpGetRecord_("PaymentAccounts",payment.account_id);
+    if(String(account.farm_id)!==String(invoice.farm_id))throw new Error("Payment account belongs to another farm.");
+  }
   if(["draft","cancelled","void"].includes(String(invoice.status||"").toLowerCase()))
     throw new Error("Only an issued invoice can receive a payment.");
   const amount=Number(payment.amount);
