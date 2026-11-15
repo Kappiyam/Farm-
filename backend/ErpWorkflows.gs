@@ -154,7 +154,7 @@ function erpRecordCustomerPayment(invoiceId, payment, requestKey) {
     payment=payment||{};
     var amount=Number(payment.amount);
     if(!isFinite(amount)||amount<=0)throw new Error("Payment amount must be positive.");
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(payment.payment_date||"")))throw new Error("A valid payment date is required.");
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(payment.payment_date||"")))throw new Error("A valid payment date is required.");
     var methods=["upi","bank_transfer","cash","cheque","card","other"];
     if(methods.indexOf(String(payment.payment_method||"").toLowerCase())<0)throw new Error("Select a valid payment method.");
     if(payment.account_id){
