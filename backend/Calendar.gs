@@ -101,7 +101,7 @@ function erpCalApplyOverrides_(occurrences,overrides){
     if(values.start_at)updated.occurrence_start=erpCalKey_(values.start_at);
     if(values.end_at)updated.occurrence_end=erpCalKey_(values.end_at);
     return updated;
-  }).filter(Boolean);
+  }).filter(item=>item&&String(item.status||"active").toLowerCase()!=="cancelled");
 }
 
 /** Return calendar instances for day/week/month/year/agenda clients. */
@@ -239,7 +239,8 @@ function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,changes,reason,req
       Utilities.DigestAlgorithm.SHA_256,String(requestKey),Utilities.Charset.UTF_8)).replace(/[^A-Za-z0-9]/g,"").slice(0,24);
     const saved=erpSave("CalendarEventOverrides",{
       override_id:prior?prior.override_id:stableId,
-      event_id:eventId,occurrence_start:erpCalKey_(occurrence),action:"update",
+      event_id:eventId,occurrence_start:erpCalKey_(occurrence),
+      action:String(merged.status||"").toLowerCase()==="cancelled"?"cancel":"update",
       overrides_json:JSON.stringify(merged),reason:reason||"",
       created_by:prior&&prior.created_by?prior.created_by:erpActor_()
     },requestKey);
