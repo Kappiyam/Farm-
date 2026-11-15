@@ -111,7 +111,7 @@ assert(Number(rows("ProcurementLines")[0].quantity_received)===10,"Repeated rece
 seed("SalesOrders",{sales_order_id:"SO-1",farm_id:"F-1",customer_id:"C-1",status:"confirmed",currency_code:"INR"});
 seed("Products",{product_id:"P-1",product_name:"Test produce",crop_id:"CR-1"});
 seed("SalesOrderLines",{sales_line_id:"SOL-1",sales_order_id:"SO-1",product_id:"P-1",quantity_ordered:10,unit:"kg",unit_price:10,tax_rate:0});
-seed("ProduceLots",{produce_lot_id:"PL-1",farm_id:"F-1",crop_id:"CR-1",unit:"kg",quantity_available:10,status:"active"});
+seed("ProduceLots",{produce_lot_id:"PL-1",farm_id:"F-1",crop_id:"CR-1",unit:"kg",quantity_received:10,quantity_available:10,status:"active"});
 throws(()=>context.erpFulfilSalesOrder("SO-1","FUL-OVER",[
   {sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:6},
   {sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:5}
