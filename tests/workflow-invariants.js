@@ -218,6 +218,9 @@ assert(overpaidIntegrity.issues.some(x=>x.entity_type==="Invoice"&&x.issue.index
 seed("FulfilmentLines",{fulfilment_id:"FUL-ORPHAN",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:1,unit:"kg"});
 const partialIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(partialIntegrity.issues.some(x=>x.entity_type==="Fulfilment"&&x.entity_id==="FUL-ORPHAN"),"Integrity report must detect fulfilment lines without matching dispatch movements.");
+seed("FulfilmentLines",{fulfilment_id:"FUL-MISSING-LOT",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-MISSING",quantity:1,unit:"kg"});
+const missingLotIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
+assert(missingLotIntegrity.issues.some(x=>x.entity_type==="FulfilmentLine"),"Integrity report must detect fulfilment lines referencing missing lots.");
 throws(()=>context.erpRunLockedWorkflow_("differentAction","pay-once",function(){return {ok:true};}),"A request key must not be reusable for a different workflow action.");
 
 // State transitions must reject impossible jumps.
