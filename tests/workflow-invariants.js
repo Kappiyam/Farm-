@@ -103,8 +103,10 @@ assert(Object.keys(ss.sheets).length>=70,"All canonical database sheets must be 
 assert(context.erpPreviewSchemaMigration().createTabs.length===0,"Schema preview should be clean after installation.");
 
 // Stable generic-save keys must return the same record without adding a duplicate.
-const farm1=farm("FARM-1","Kappiyam test farm");
-const duplicateFarm=context.erpSave("Farms",{farm_name:"Kappiyam test farm",farm_code:"FARM-1",country_code:"IN",timezone:"Asia/Kolkata",currency_code:"INR"},"farm-create-once");
+const farmRecord={farm_name:"Kappiyam test farm",farm_code:"FARM-1",country_code:"IN",timezone:"Asia/Kolkata",currency_code:"INR"};
+const firstFarmCreate=context.erpSave("Farms",farmRecord,"farm-create-once");
+const duplicateFarm=context.erpSave("Farms",farmRecord,"farm-create-once");
+const farm1=firstFarmCreate.record;
 assert(duplicateFarm.duplicate===true&&rows("Farms").length===1,"Generic save replay must return the original farm.");
 const loc1=fieldAndPlot(farm1.farm_id,"A");
 
