@@ -9,7 +9,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `6b48abe` (stock issue workflow and expanded reconciliation checks)
+- Latest known work package: `251d858` (sales product validation and stock workflow tests passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -42,7 +42,7 @@ Last updated: 2026-11-15
 12. Added `docs/SECURITY_MODEL.md` defining the owner-only posture and the required server-side authorization work before worker access.
 16. Prepared `docs/ACCEPTANCE_TEST_PLAN.md` with disposable-spreadsheet scenarios, failure recovery, security checks and evidence requirements.
 8. Contract audit: all 26 frontend API calls resolve and their argument counts fit backend signatures; all 77 UI table references and all 43 lookup-map entries resolve to the canonical schema; 81 canonical tables are defined in schema version `1.0.2`, including the new Attachments metadata table exposed in the Scouting workspace. CI also guards the Apps Script manifest to keep deployment owner-only. Latest workflow checks passed on `20fad92`; the current branch head contains documentation-only changes after that passing run.
-9. GitHub Actions passed on commit `b4a4f06`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines with supplier/item farm-scope validation, same-lot fulfilment aggregation, idempotent receipt/fulfilment/invoice/payment replay, task status transitions and duplicate-safe crop-task generation. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
+9. GitHub Actions passed on commit `b4a4f06`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines with supplier/item farm-scope validation, same-lot fulfilment aggregation and missing/inactive product rejection, idempotent receipt/fulfilment/invoice/payment replay, task status transitions and duplicate-safe crop-task generation. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
 
 ## Known limitations and remaining work
 
