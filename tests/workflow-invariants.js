@@ -136,6 +136,11 @@ assert(rows("Payments").length===0,"Rejected payment attempts must not create pa
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 assert(rows("Payments").length===1,"Payment replay must not duplicate payment records.");
+const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
+assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
+seed("FulfilmentLines",{fulfilment_id:"FUL-ORPHAN",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:1,unit:"kg"});
+const partialIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
+assert(partialIntegrity.issues.some(x=>x.entity_type==="Fulfilment"&&x.entity_id==="FUL-ORPHAN"),"Integrity report must detect fulfilment lines without matching dispatch movements.");
 throws(()=>context.erpRunLockedWorkflow_("differentAction","pay-once",function(){return {ok:true};}),"A request key must not be reusable for a different workflow action.");
 
 // State transitions must reject impossible jumps.
