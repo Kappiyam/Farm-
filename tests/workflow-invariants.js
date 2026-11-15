@@ -126,6 +126,14 @@ seed("ProcurementLines",{procurement_line_id:"POL-2",procurement_id:"PO-2",farm_
 throws(()=>context.erpReceiveProcurement("PO-2",[{procurement_line_id:"POL-2",quantity:1,lot_code:"WRONG-FARM"}],"po-wrong-item-farm"),"Inventory items from another farm must be rejected.");
 assert(rows("StockLots").length===2,"Cross-farm procurement item must not create stock lots.");
 
+const firstStockLot=rows("StockLots").find(x=>String(x.lot_code)==="A");
+context.erpIssueInventoryLot(firstStockLot.lot_id,2,"","Field use","Irrigation block","issue-once");
+context.erpIssueInventoryLot(firstStockLot.lot_id,2,"","Field use","Irrigation block","issue-once");
+assert(Number(rows("StockLots").find(x=>x.lot_id===firstStockLot.lot_id).quantity_available)===2,"Stock issue must reduce lot balance once.");
+assert(rows("InventoryTransactions").filter(x=>String(x.lot_id)===String(firstStockLot.lot_id)&&x.transaction_type==="issue").length===1,"Stock issue replay must not duplicate issue transactions.");
+throws(()=>context.erpIssueInventoryLot(firstStockLot.lot_id,3,"","Overissue","Test","issue-over"),"Stock issue must not exceed available quantity.");
+
+
 
 // Fulfilment: repeated references to one lot must be aggregated before availability validation.
 seed("SalesOrders",{sales_order_id:"SO-1",farm_id:"F-1",customer_id:"C-1",status:"confirmed",currency_code:"INR"});
