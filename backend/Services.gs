@@ -561,12 +561,12 @@ function erpPostLedger(table,record,idempotencyKey){
     const keyCol=keyHeaders.indexOf("idempotency_key")+1;
     if(!keyCol)throw new Error("Idempotency key column is missing.");
     const keyValues=keys.getLastRow()>=2?keys.getRange(2,keyCol,keys.getLastRow()-1,1).getDisplayValues().flat():[];
-    let keyRow=keyValues.indexOf(String(idempotencyKey));
+    const keyOffset=keyValues.indexOf(String(idempotencyKey));
+    let keyRow=keyOffset>=0?keyOffset+2:0;
     const payloadHash=Utilities.base64Encode(Utilities.computeDigest(
       Utilities.DigestAlgorithm.SHA_256,JSON.stringify(record),Utilities.Charset.UTF_8));
     let reservedId="";
-    if(keyRow>=0){
-      keyRow+=2;
+    if(keyRow){
       const operation=keyHeaders.indexOf("operation_type")>=0
         ?String(keys.getRange(keyRow,keyHeaders.indexOf("operation_type")+1).getDisplayValue()):"";
       if(operation!==table)throw new Error("This idempotency key was already used for another operation.");
