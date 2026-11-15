@@ -87,12 +87,36 @@ function erpReceiveProcurement(procurementId,receipts,requestKey){
   if(!Array.isArray(receipts)||!receipts.length)throw new Error("At least one receipt line is required.");
   const order=erpGetRecord_("ProcurementOrders",procurementId);
   if(["cancelled","closed"].includes(String(order.status||"").toLowerCase()))throw new Error("This procurement order is closed.");
-  const results=[];
-  receipts.forEach((r,index)=>{
+  const grouped={},requestedByLine={};
+  receipts.forEach(r=>{
     const line=erpGetRecord_("ProcurementLines",r.procurement_line_id);
     if(String(line.procurement_id)!==String(procurementId))throw new Error("Receipt line does not belong to this procurement order.");
     const qty=Number(r.quantity);
-    if(!(qty>0))throw new Error("Receipt quantity must be greater than zero.");
+    if(!(qty>0)||!isFinite(qty))throw new Error("Receipt quantity must be greater than zero.");
+    const item=erpGetRecord_("InventoryItems",line.item_id);
+    if(item.farm_id&&String(item.farm_id)!==String(order.farm_id))throw new Error("Inventory item belongs to another farm.");
+    const lotCode=String(r.lot_code||"").trim();
+    const groupKey=String(line.procurement_line_id)+"|"+lotCode;
+    if(!grouped[groupKey])grouped[groupKey]=Object.assign({},r,{procurement_line_id:line.procurement_line_id,quantity:0,lot_code:lotCode});
+    grouped[groupKey].quantity+=qty;
+    requestedByLine[line.procurement_line_id]=(requestedByLine[line.procurement_line_id]||0)+qty;
+  });
+  const inventoryBefore=erpRead_("InventoryTransactions",{limit:1000}).rows;
+  Object.keys(requestedByLine).forEach(lineId=>{
+    const line=erpGetRecord_("ProcurementLines",lineId);
+    const alreadyReceived=inventoryBefore.filter(t=>String(t.reference_type)==="ProcurementLine"&&
+      String(t.reference_id)===String(lineId)&&["receipt","return_in"].includes(String(t.transaction_type||"").toLowerCase()))
+      .reduce((sum,t)=>sum+(Number(t.quantity)||0),0);
+    const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-alreadyReceived);
+    if(requestedByLine[lineId]>outstanding+0.000001)
+      throw new Error("Receipt batch exceeds the outstanding ordered quantity for "+(line.description||lineId)+".");
+  });
+  const results=[];
+  Object.values(grouped).forEach((r,index)=>{
+    const line=erpGetRecord_("ProcurementLines",r.procurement_line_id);
+    if(String(line.procurement_id)!==String(procurementId))throw new Error("Receipt line does not belong to this procurement order.");
+    const qty=Number(r.quantity);
+    if(!(qty>0)||!isFinite(qty))throw new Error("Receipt quantity must be greater than zero.");
     const item=erpGetRecord_("InventoryItems",line.item_id);
     const lotCode=String(r.lot_code||"").trim();
     if(!lotCode)throw new Error("Lot/batch code is required for received stock.");
@@ -109,9 +133,7 @@ function erpReceiveProcurement(procurementId,receipts,requestKey){
     }
     const key=requestKey+":"+line.procurement_line_id+":"+lotCode;
     const prior=erpFindOne_("IdempotencyKeys",{idempotency_key:key});
-    const outstanding=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0));
-    if(!prior&&qty>outstanding+0.000001)
-      throw new Error("Receipt exceeds the outstanding ordered quantity for "+line.description+".");
+    if(prior&&String(prior.operation_type||"")!=="InventoryTransactions")throw new Error("Receipt request key is already used by another operation.");
     const posted=erpPostLedger("InventoryTransactions",{
       farm_id:order.farm_id,item_id:line.item_id,lot_id:lot.lot_id,transaction_type:"receipt",
       quantity:qty,unit:r.unit||line.unit,unit_cost:r.unit_cost===undefined?line.unit_cost:r.unit_cost,
@@ -196,6 +218,13 @@ function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate,re
   if(!Array.isArray(lines)||!lines.length)throw new Error("At least one fulfilment line is required.");
   const order=erpGetRecord_("SalesOrders",orderId);
   if(["cancelled","closed"].includes(String(order.status||"").toLowerCase()))throw new Error("This sales order is closed.");
+  const grouped={};
+  lines.forEach(line=>{
+    const key=String(line.sales_line_id)+"|"+String(line.produce_lot_id);
+    if(!grouped[key])grouped[key]=Object.assign({},line,{quantity:0});
+    grouped[key].quantity+=Number(line.quantity)||0;
+  });
+  lines=Object.values(grouped);
   const requestedByLine={},requestedByLot={};
   lines.forEach(line=>{
     const salesLine=erpGetRecord_("SalesOrderLines",line.sales_line_id);
@@ -204,8 +233,12 @@ function erpFulfilSalesOrder(orderId,fulfilmentReference,lines,fulfilmentDate,re
     if(String(lot.farm_id)!==String(order.farm_id))throw new Error("Produce lot belongs to another farm.");
     const qty=Number(line.quantity);
     if(!(qty>0)||!isFinite(qty))throw new Error("Fulfilment quantity must be greater than zero.");
-    requestedByLine[line.sales_line_id]=(requestedByLine[line.sales_line_id]||0)+qty;
-    requestedByLot[line.produce_lot_id]=(requestedByLot[line.produce_lot_id]||0)+qty;
+    const movementKey=requestKey+":"+line.sales_line_id+":"+line.produce_lot_id;
+    const alreadyPosted=erpFindOne_("ProduceLotMovements",{idempotency_key:movementKey});
+    if(!alreadyPosted){
+      requestedByLine[line.sales_line_id]=(requestedByLine[line.sales_line_id]||0)+qty;
+      requestedByLot[line.produce_lot_id]=(requestedByLot[line.produce_lot_id]||0)+qty;
+    }
   });
   Object.keys(requestedByLine).forEach(lineId=>{
     const line=erpGetRecord_("SalesOrderLines",lineId);
