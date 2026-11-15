@@ -43,12 +43,82 @@ function erpReadReportRows_(table,farmId){
   const parentIds=new Set(parents.map(r=>String(r[ERP_KEYS[relation[0]]]||"")));
   return rows.filter(r=>parentIds.has(String(r[relation[1]]||"")));
 }
+function erpGetWorkflowIntegrityReport(farmId){
+  const issues=[],tolerance=0.000001;
+  const read=table=>erpReadReportRows_(table,farmId);
+  const add=(entity,id,issue,expected,actual)=>issues.push({entity_type:entity,entity_id:id,issue:issue,expected:expected,actual:actual});
+  const procurementLines=read("ProcurementLines"),inventory=read("InventoryTransactions");
+  procurementLines.forEach(line=>{
+    const posted=inventory.filter(t=>String(t.reference_type)==="ProcurementLine"&&
+      String(t.reference_id)===String(line.procurement_line_id)&&["receipt","return_in"].includes(String(t.transaction_type||"").toLowerCase()))
+      .reduce((sum,t)=>sum+(Number(t.quantity)||0),0);
+    if(Math.abs(posted-(Number(line.quantity_received)||0))>tolerance)
+      add("ProcurementLines",line.procurement_line_id,"Receipt total does not reconcile to inventory ledger",posted,Number(line.quantity_received)||0);
+  });
+  read("StockLots").forEach(lot=>{
+    const balance=erpStockBalance(lot.item_id,lot.lot_id,lot.farm_id);
+    if(Math.abs(balance-(Number(lot.quantity_available)||0))>tolerance)
+      add("StockLots",lot.lot_id,"Lot snapshot does not match inventory movement ledger",balance,Number(lot.quantity_available)||0);
+  });
+  const harvestSessions=new Map(read("HarvestSessions").map(x=>[String(x.harvest_id),x]));
+  read("HarvestLines").forEach(line=>{
+    const session=harvestSessions.get(String(line.harvest_id));
+    if(!session)add("HarvestLines",line.harvest_line_id,"Harvest session reference is missing",line.harvest_id,"not found");
+    const saleable=["sale","saleable","processing"].includes(String(line.disposition||"").toLowerCase());
+    if(saleable&&(!line.produce_lot_id||!erpGetCached_("ProduceLots",line.produce_lot_id)))
+      add("HarvestLines",line.harvest_line_id,"Saleable harvest line has no linked produce lot","produce_lot_id","missing");
+  });
+  read("ProduceLots").forEach(lot=>{
+    const balance=erpProduceLotBalance_(lot.produce_lot_id);
+    if(Math.abs(balance-(Number(lot.quantity_available)||0))>tolerance)
+      add("ProduceLots",lot.produce_lot_id,"Produce lot snapshot does not match produce movement ledger",balance,Number(lot.quantity_available)||0);
+  });
+  const fulfilments=new Map(read("Fulfilments").map(x=>[String(x.fulfilment_id),x]));
+  const movements=read("ProduceLotMovements");
+  read("FulfilmentLines").forEach(line=>{
+    if(!fulfilments.has(String(line.fulfilment_id)))
+      add("FulfilmentLines",line.fulfilment_line_id,"Fulfilment header reference is missing",line.fulfilment_id,"not found");
+    const moved=movements.filter(m=>String(m.reference_type)==="Fulfilment"&&
+      String(m.reference_id)===String(line.fulfilment_id)&&String(m.produce_lot_id)===String(line.produce_lot_id)&&
+      ["dispatch","sale"].includes(String(m.movement_type||"").toLowerCase()))
+      .reduce((sum,m)=>sum+(Number(m.quantity)||0),0);
+    const linked=read("FulfilmentLines").filter(x=>String(x.fulfilment_id)===String(line.fulfilment_id)&&
+      String(x.produce_lot_id)===String(line.produce_lot_id)).reduce((sum,x)=>sum+(Number(x.quantity)||0),0);
+    if(moved+ tolerance < linked)
+      add("FulfilmentLines",line.fulfilment_line_id,"Dispatched quantity exceeds the linked produce movement quantity",linked,moved);
+  });
+  const invoices=read("Invoices"),invoiceLines=read("InvoiceLines"),payments=read("Payments");
+  invoices.forEach(invoice=>{
+    const lines=invoiceLines.filter(x=>String(x.invoice_id)===String(invoice.invoice_id));
+    const subtotal=lines.reduce((sum,x)=>sum+(Number(x.line_total)||0),0);
+    const total=subtotal+(Number(invoice.tax_amount)||0);
+    if(Math.abs(total-(Number(invoice.total_amount)||0))>tolerance)
+      add("Invoices",invoice.invoice_id,"Invoice header total does not reconcile to invoice lines",total,Number(invoice.total_amount)||0);
+    const paid=payments.filter(x=>String(x.invoice_id)===String(invoice.invoice_id)).reduce((sum,x)=>sum+(Number(x.amount)||0),0);
+    if(Math.abs(paid-(Number(invoice.paid_amount)||0))>tolerance)
+      add("Invoices",invoice.invoice_id,"Paid amount does not reconcile to payment records",paid,Number(invoice.paid_amount)||0);
+    const balance=Math.max(0,(Number(invoice.total_amount)||0)-paid);
+    if(Math.abs(balance-(Number(invoice.balance_due)||0))>tolerance)
+      add("Invoices",invoice.invoice_id,"Balance due does not reconcile to invoice total and payments",balance,Number(invoice.balance_due)||0);
+    if(paid>(Number(invoice.total_amount)||0)+tolerance)
+      add("Invoices",invoice.invoice_id,"Payments exceed invoice total",Number(invoice.total_amount)||0,paid);
+  });
+  return {ok:issues.length===0,farmId:farmId||"",issueCount:issues.length,checkCount:
+    procurementLines.length+read("StockLots").length+read("HarvestLines").length+read("ProduceLots").length+
+    read("FulfilmentLines").length+invoices.length,issues:issues,
+    methodology:"Read-only reconciliation of procurement receipt postings, stock-lot balances, harvest traceability, produce-lot balances, fulfilment movements, invoice totals and customer payments. No records are repaired or changed."};
+}
+
 function erpReport(name,filters){
   filters=filters||{};
   const range=erpReportDates_(filters),farmId=filters.farmId||"";
   const inRange=v=>!v|| (erpDateKey_(v)>=range.start&&erpDateKey_(v)<=range.end);
   const read=(table)=>erpReadReportRows_(table,farmId);
   let rows=[],summary={},methodology="";
+  if(name==="integrity"){
+    const result=erpGetWorkflowIntegrityReport(farmId);
+    return {ok:true,report:"integrity",period:{start:"All records",end:"All records"},summary:{issues:result.issueCount,checks:result.checkCount,passed:result.ok},rows:result.issues,methodology:result.methodology};
+  }
   if(name==="production"){
     const crops={};read("CropCycles").filter(c=>inRange(c.start_date)).forEach(c=>{
       const crop=erpGetCached_("Crops",c.crop_id),key=c.crop_id||"unknown";
