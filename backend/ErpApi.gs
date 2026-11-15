@@ -92,7 +92,7 @@ function erpSave(tableName, record, requestKey) {
   } finally {lock.releaseLock();}
 }
 
-function erpArchive(tableName, id, reason) {
+function erpArchiveUnlocked_(tableName, id, reason) {
   erpAssertTable_(tableName);
   if (ERP_ARCHIVABLE_TABLES.indexOf(tableName)<0) throw new Error("This record type cannot be archived.");
   var key=ERP_TABLE_KEYS[tableName], result=erpUpdateByKey_(tableName,key,id,{status:"inactive"});
@@ -149,18 +149,20 @@ function erpGetTaskBoard(farmId) {
   }};
 }
 
-function erpUpdateTaskStatus(taskId,status,reason) {
+function erpUpdateTaskStatusUnlocked_(taskId,status,reason) {
   var allowed=["planned","assigned","in_progress","blocked","completed","deferred","cancelled"];
   if(allowed.indexOf(status)<0)throw new Error("Unsupported task status.");
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
+  var transitions={planned:["assigned","cancelled"],assigned:["in_progress","blocked","planned","cancelled"],in_progress:["blocked","completed","assigned"],blocked:["in_progress","cancelled"],completed:[],deferred:["planned","assigned","cancelled"],cancelled:[]};
+  var current=String(task.status||"planned").toLowerCase();
+  if(current!==String(status).toLowerCase()&&(!transitions[current]||transitions[current].indexOf(String(status).toLowerCase())<0))throw new Error("Invalid task status transition: "+current+" → "+status+".");
   var result=erpUpdateByKey_("Tasks","task_id",taskId,{status:status,updated_at:new Date().toISOString()});
   erpAppend_("TaskStatusHistory",{farm_id:task.farm_id,task_id:taskId,from_status:task.status||"",to_status:status,changed_at:new Date().toISOString(),reason:reason||"",changed_by:erpActor_()});
   erpAudit_("Tasks",taskId,"status_change",{from:task.status,to:status,reason:reason||""});
   return {ok:true,status:status,task:result};
 }
 
-function erpAssignTask(taskId, assignments, requestKey) {
-  var prior=requestKey&&erpIdempotentResult_(requestKey);if(prior)return prior;
+function erpAssignTaskUnlocked_(taskId, assignments, requestKey) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
   var created=[],already=0;
   (assignments||[]).forEach(function(item){
@@ -179,17 +181,16 @@ function erpAssignTask(taskId, assignments, requestKey) {
   });
   if(created.length&&task.status==="planned")erpUpdateByKey_("Tasks","task_id",taskId,{status:"assigned",updated_at:new Date().toISOString()});
   var result={ok:true,assignedCount:created.length,alreadyAssignedCount:already,assignments:created};
-  if(requestKey)erpStoreIdempotency_(requestKey,"erpAssignTask",result);return result;
+  return result;
 }
 
-function erpRecordTaskExecution(taskId, entries, requestKey) {
+function erpRecordTaskExecutionUnlocked_(taskId, entries, requestKey) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
-  var prior=requestKey&&erpIdempotentResult_(requestKey);if(prior)return prior;
   var created=(entries||[]).map(function(e){
     return erpAppend_("TaskExecution",Object.assign({},e,{farm_id:task.farm_id,task_id:taskId,executed_at:e.executed_at||e.started_at||new Date().toISOString(),recorded_by:erpActor_()}));
   });
   if(created.length&&task.status!=="completed")erpUpdateByKey_("Tasks","task_id",taskId,{status:"in_progress",updated_at:new Date().toISOString()});
-  var result={ok:true,recordedCount:created.length,executions:created};if(requestKey)erpStoreIdempotency_(requestKey,"erpRecordTaskExecution",result);return result;
+  var result={ok:true,recordedCount:created.length,executions:created};return result;
 }
 
 function erpPreviewCropTasks(cropCycleId) {
@@ -223,11 +224,10 @@ function erpCreateTaskFromObservation(observationId, title, dueAt, priority) {
   return erpAppend_("Tasks",{farm_id:o.farm_id,site_id:o.site_id,field_id:o.field_id,plot_id:o.plot_id,bed_id:o.bed_id,crop_cycle_id:o.crop_cycle_id,title:title||"Follow up: "+o.category,description:o.description,task_type:"scouting_follow_up",priority:priority||(["high","severe"].indexOf(String(o.severity).toLowerCase())>=0?"high":"normal"),status:"planned",due_at:dueAt||"",created_by:erpActor_()});
 }
 
-function erpPostLedger(tableName, record, requestKey) {
+function erpPostLedgerUnlocked_(tableName, record, requestKey) {
   if(ERP_LEDGER_TABLES.indexOf(tableName)<0)throw new Error("Unsupported ledger table.");
-  var prior=requestKey&&erpIdempotentResult_(requestKey);if(prior)return prior;
   var saved=erpAppend_(tableName,record||{});
-  var result={ok:true,record:saved};if(requestKey)erpStoreIdempotency_(requestKey,"erpPostLedger",result);return result;
+  var result={ok:true,record:saved};return result;
 }
 
 /* Internal data access and validation helpers. */
@@ -277,3 +277,13 @@ function erpIdempotentResult_(key){
 function erpStoreIdempotency_(key,action,result){
   if(!key)return;erpAppend_("IdempotencyKeys",{request_key:key,action:action,result_json:JSON.stringify(result),created_at:new Date().toISOString()});
 }
+
+function erpArchive(tableName,id,reason){return erpRunLockedWorkflow_("erpArchive",null,function(){return erpArchiveUnlocked_(tableName,id,reason);});}
+
+function erpUpdateTaskStatus(taskId,status,reason){return erpRunLockedWorkflow_("erpUpdateTaskStatus",null,function(){return erpUpdateTaskStatusUnlocked_(taskId,status,reason);});}
+
+function erpAssignTask(taskId,assignments,requestKey){return erpRunLockedWorkflow_("erpAssignTask",requestKey,function(){return erpAssignTaskUnlocked_(taskId,assignments,null);});}
+
+function erpRecordTaskExecution(taskId,entries,requestKey){return erpRunLockedWorkflow_("erpRecordTaskExecution",requestKey,function(){return erpRecordTaskExecutionUnlocked_(taskId,entries,null);});}
+
+function erpPostLedger(tableName,record,requestKey){return erpRunLockedWorkflow_("erpPostLedger",requestKey,function(){return erpPostLedgerUnlocked_(tableName,record,null);});}
