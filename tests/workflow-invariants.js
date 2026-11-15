@@ -81,6 +81,18 @@ function throws(fn,message){let did=false;try{fn();}catch(e){did=true;}assert(di
 throws(()=>context.erpSave("Sites",{farm_id:"F-1",site_name:"Test site",unexpected_field:"bad"}),"Unknown save fields must be rejected.");
 throws(()=>context.erpSave("Sites",{site_id:"NONEXISTENT",farm_id:"F-1",site_name:"Test site"}),"Unknown supplied primary keys must not create records.");
 
+// Simulate an interrupted multi-sheet workflow: a failed request key must block blind replay.
+const journalBefore=rows("ActivityJournal").length;
+throws(()=>context.erpRunLockedWorkflow_("testPartialWrite","partial-write-key",function(){
+  context.erpAppend_("ActivityJournal",{farm_id:"F-1",activity_date:"2026-11-15",activity_type:"test",title:"Partial write"});
+  throw new Error("injected failure after first write");
+}),"Injected workflow failure should surface.");
+assert(rows("ActivityJournal").length===journalBefore+1,"Failure injection should leave the first write visible for reconciliation.");
+throws(()=>context.erpRunLockedWorkflow_("testPartialWrite","partial-write-key",function(){
+  context.erpAppend_("ActivityJournal",{farm_id:"F-1",activity_date:"2026-11-15",activity_type:"test",title:"Duplicate retry"});
+}),"A failed request key must block blind retry.");
+assert(rows("ActivityJournal").length===journalBefore+1,"A failed request retry must not append duplicate data.");
+
 // Procurement: repeated input lines must be summed before any write.
 seed("ProcurementOrders",{procurement_id:"PO-1",farm_id:"F-1",supplier_id:"S-1",status:"ordered"});
 seed("ProcurementLines",{procurement_line_id:"POL-1",procurement_id:"PO-1",farm_id:"F-1",item_id:"I-1",quantity_ordered:10,quantity_received:0,unit:"kg",unit_cost:5});
