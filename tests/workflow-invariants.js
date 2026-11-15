@@ -125,6 +125,9 @@ seed("Tasks",{task_id:"T-1",farm_id:"F-1",status:"planned",title:"Test task"});
 throws(()=>context.erpUpdateTaskStatus("T-1","completed","invalid jump"),"Planned task must not jump directly to completed.");
 context.erpUpdateTaskStatus("T-1","assigned","valid transition");
 assert(rows("Tasks")[0].status==="assigned","Valid task transition should persist.");
+const historyCount=rows("TaskStatusHistory").length;
+context.erpUpdateTaskStatus("T-1","assigned","duplicate retry");
+assert(rows("TaskStatusHistory").length===historyCount,"Repeated identical task status must not append duplicate history.");
 
 
 // Crop task generation must remain duplicate-safe when the same cycle is generated twice.
