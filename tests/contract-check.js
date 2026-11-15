@@ -113,6 +113,7 @@ for (const file of ["ErpApi.gs", "ErpWorkflows.gs"]) {
   check(backend.includes("function erpRunLockedWorkflow_"), "Missing shared workflow lock helper.");
 }
 const workflowLocks = [
+  ["ErpWorkflows.gs","erpIssueInventoryLot"],
   ["ErpWorkflows.gs","erpReceiveProcurement"],
   ["ErpWorkflows.gs","erpFinalizeHarvest"],
   ["ErpWorkflows.gs","erpFulfilSalesOrder"],
