@@ -269,7 +269,8 @@ seed("CropCycles",{crop_cycle_id:"CC-1",farm_id:"F-1",crop_id:"CR-1",planting_da
 seed("TaskTemplates",{template_id:"TT-1",farm_id:"F-1",crop_id:"CR-1",template_name:"First field check",task_type:"scouting",offset_days:7,default_priority:"normal",status:"active"});
 context.erpGenerateCropTasks("CC-1","crop-generation-replay");
 context.erpGenerateCropTasks("CC-1","crop-generation-replay");
-assert(rows("Tasks").filter(t=>String(t.crop_cycle_id)==="CC-1").length===1,"Repeated crop task generation must not duplicate template tasks.");
+context.erpGenerateCropTasks("CC-1","crop-generation-new-attempt");
+assert(rows("Tasks").filter(t=>String(t.crop_cycle_id)==="CC-1").length===1,"Repeated crop task generation must not duplicate template tasks, even with a new request key.");
 
 // Schema migration must remain additive and preserve existing row data.
 const siteHeaders=vm.runInContext('ERP_TABLE_DEFINITIONS',context).Sites.split("|");
