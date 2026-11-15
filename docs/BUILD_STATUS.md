@@ -51,10 +51,10 @@ Last updated: 2026-11-15
 ## Known limitations and remaining work
 
 1. Google Sheets does not provide multi-sheet atomic transactions. ScriptLock serialises concurrent execution. Write-ahead idempotency markers prevent blind replay after an interrupted or failed request, but a service interruption after the first write can still leave partial records that require manual reconciliation. Automated reconciliation/compensation is still required.
-2. Frontend idempotency-key coverage still needs a final audit across every critical write. Generic saves, calendar creation, stock issues, task creation, and archive actions now send request keys; remaining write paths still require review.
+2. Frontend idempotency-key coverage still needs a final audit across every critical write. Generic saves, calendar creation/updates/cancellation, task status changes, crop-task generation, stock issues, task creation, and archive actions now send request keys; procurement, harvest, fulfilment, invoicing, payments, assignments and execution also use request keys.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. A full argument/return-shape and field-level UI/API audit remains incomplete; current contract checks are stronger but not a substitute for full runtime validation.
-5. Mocked tests now cover payment replay/overpayment detection, task assignment/execution membership and contribution limits, calendar recurrence and task replay, stock issue, archive replay, harvest traceability, missing references and partial-write blocking. These tests do not prove Apps Script runtime or Google Sheets behaviour.
+5. Mocked tests now cover payment replay/overpayment detection, task assignment/execution membership and contribution limits, calendar recurrence and task replay, stock issue, archive and task-status replay, crop-task generation replay, harvest traceability, missing references and partial-write blocking. These tests do not prove Apps Script runtime or Google Sheets behaviour.
 6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
