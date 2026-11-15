@@ -254,7 +254,7 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(Math.abs(expected-actual)>tolerance)issue("ProduceLot",lot.produce_lot_id,"Available lot quantity does not match received quantity less recorded dispatches.",expected,actual);
   });
 
-  var invoices=erpReadTable_("Invoices").filter(inFarmIntegrity),invoiceLines=erpReadTable_("InvoiceLines");
+  var invoices=erpReadTable_("Invoices").filter(inFarmIntegrity),invoiceLines=erpReadTable_("InvoiceLines"),payments=erpReadTable_("Payments");
   invoices.forEach(function(invoice){
     checks++;
     var lines=invoiceLines.filter(function(line){return String(line.invoice_id)===String(invoice.invoice_id);});
@@ -263,6 +263,8 @@ function erpGetWorkflowIntegrityReport(farmId) {
     if(Math.abs(subtotal-(Number(invoice.subtotal)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice line subtotal does not match invoice header.",subtotal,Number(invoice.subtotal)||0);
     if(Math.abs(tax-(Number(invoice.tax_amount)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice line tax does not match invoice header.",tax,Number(invoice.tax_amount)||0);
     if(Math.abs(subtotal+tax-(Number(invoice.total_amount)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice total does not equal line subtotal plus tax.",subtotal+tax,Number(invoice.total_amount)||0);
+    var paid=payments.filter(function(p){return String(p.invoice_id)===String(invoice.invoice_id);}).reduce(function(sum,p){return sum+(Number(p.amount)||0);},0);
+    if(paid>(Number(invoice.total_amount)||0)+tolerance)issue("Invoice",invoice.invoice_id,"Recorded customer payments exceed invoice total.",Number(invoice.total_amount)||0,paid);
   });
   return {ok:issues.length===0,readOnly:true,issueCount:issues.length,checkCount:checks,issues:issues,
     methodology:"Read-only comparisons across procurement receipt transactions, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances and invoice line totals. It reports inconsistencies for review and never changes source records.",
