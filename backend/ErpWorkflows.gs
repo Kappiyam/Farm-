@@ -150,8 +150,17 @@ function erpCreateInvoiceFromOrder(orderId, dueDate, requestKey) {
 function erpRecordCustomerPayment(invoiceId, payment, requestKey) {
   return erpRunLockedWorkflow_("erpRecordCustomerPayment",requestKey,function(){
     var invoice=erpFindByKey_("Invoices","invoice_id",invoiceId);if(!invoice)throw new Error("Invoice not found.");
-    var amount=Number(payment&&payment.amount);
+    if(["void","cancelled"].indexOf(String(invoice.status||"").toLowerCase())>=0)throw new Error("Payments cannot be recorded against a void or cancelled invoice.");
+    payment=payment||{};
+    var amount=Number(payment.amount);
     if(!isFinite(amount)||amount<=0)throw new Error("Payment amount must be positive.");
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(payment.payment_date||"")))throw new Error("A valid payment date is required.");
+    var methods=["upi","bank_transfer","cash","cheque","card","other"];
+    if(methods.indexOf(String(payment.payment_method||"").toLowerCase())<0)throw new Error("Select a valid payment method.");
+    if(payment.account_id){
+      var account=erpFindByKey_("PaymentAccounts","account_id",payment.account_id);
+      if(!account||String(account.farm_id)!==String(invoice.farm_id)||!erpActive_(account.status))throw new Error("The selected payment account is not active for this farm.");
+    }
     var received=erpReadTable_("Payments").filter(function(p){return String(p.invoice_id)===String(invoiceId);}).reduce(function(sum,p){return sum+(Number(p.amount)||0);},0);
     var balance=Math.max(0,Number(invoice.total_amount)-received);
     if(amount>balance+0.000001)throw new Error("Payment exceeds outstanding invoice balance.");
