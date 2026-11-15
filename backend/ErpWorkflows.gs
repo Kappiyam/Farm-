@@ -120,7 +120,8 @@ function erpFulfilSalesOrder(orderId, fulfilmentReference, fulfilLines, fulfilme
       var lot=lots.find(function(y){return String(y.produce_lot_id)===String(x.produce_lot_id);});
       if(!line||!lot)throw new Error("Invalid sales line or produce lot.");
       var qty=Number(x.quantity);if(!isFinite(qty)||qty<=0)throw new Error("Fulfilment quantity must be positive.");
-      var product=erpFindByKey_("Products","product_id",line.product_id)||{};
+      var product=erpFindByKey_("Products","product_id",line.product_id);
+      if(!product||!erpActive_(product.status))throw new Error("Sales order product is missing or inactive.");
       if(String(lot.farm_id)!==String(order.farm_id)||String(lot.unit)!==String(line.unit)||String(lot.crop_id)!==String(product.crop_id))throw new Error("Produce lot does not match the order product, farm or unit.");
       if(String(lot.status)!=="active")throw new Error("Produce lot is not active.");
       byLine[line.sales_line_id]=(byLine[line.sales_line_id]||0)+qty;
