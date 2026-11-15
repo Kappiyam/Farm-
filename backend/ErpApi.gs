@@ -244,7 +244,7 @@ function erpGenerateCropTasksUnlocked_(cropCycleId) {
 
 function cycleCycleName_(cycle){return cycle.crop_cycle_id||"Crop cycle";}
 
-function erpCreateTaskFromObservation(observationId, title, dueAt, priority) {
+function erpCreateTaskFromObservationUnlocked_(observationId, title, dueAt, priority) {
   var o=erpFindByKey_("Observations","observation_id",observationId);if(!o)throw new Error("Observation not found.");
   return erpAppend_("Tasks",{farm_id:o.farm_id,site_id:o.site_id,field_id:o.field_id,plot_id:o.plot_id,bed_id:o.bed_id,crop_cycle_id:o.crop_cycle_id,title:title||"Follow up: "+o.category,description:o.description,task_type:"scouting_follow_up",priority:priority||(["high","severe"].indexOf(String(o.severity).toLowerCase())>=0?"high":"normal"),status:"planned",due_at:dueAt||"",created_by:erpActor_()});
 }
@@ -336,3 +336,5 @@ function erpRecordTaskExecution(taskId,entries,requestKey){return erpRunLockedWo
 function erpPostLedger(tableName,record,requestKey){return erpRunLockedWorkflow_("erpPostLedger",requestKey,function(){return erpPostLedgerUnlocked_(tableName,record,null);});}
 
 function erpGenerateCropTasks(cropCycleId,requestKey){return erpRunLockedWorkflow_("erpGenerateCropTasks",requestKey,function(){return erpGenerateCropTasksUnlocked_(cropCycleId);});}
+
+function erpCreateTaskFromObservation(observationId,title,dueAt,priority,requestKey){return erpRunLockedWorkflow_("erpCreateTaskFromObservation",requestKey,function(){return erpCreateTaskFromObservationUnlocked_(observationId,title,dueAt,priority);});}
