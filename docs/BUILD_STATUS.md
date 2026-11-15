@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `9b2a058` (API write serialisation and task-state validation)
+- Latest known work package: `594dd85` (mocked workflow invariant tests passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -32,7 +32,7 @@ Last updated: 2026-11-15
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation.
 8. Initial contract audit: all 26 frontend API call names resolve; all 77 UI table references are present in the canonical schema; 80 canonical tables are defined.
-9. GitHub Actions passed on commits `d56126a` and `9b2a058`. These are static syntax/contract checks, not live Apps Script runtime tests.
+9. GitHub Actions passed on commit `594dd85`: syntax/contract checks plus mocked Sheets-service workflow tests. The tests cover cumulative duplicate procurement lines, same-lot fulfilment aggregation, idempotent receipt/fulfilment/invoice/payment replay and task status transitions. This is a mocked runtime, not a live Apps Script or real Google Sheets integration test.
 
 ## Known limitations and remaining work
 
@@ -40,7 +40,7 @@ Last updated: 2026-11-15
 2. Frontend does not yet consistently pass stable idempotency request keys for every critical write. Verify and add request keys at the UI boundary.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. Full argument/return-shape and field-level UI/API audit remains incomplete.
-5. Add functional tests for duplicate receipt lines, same-lot multi-line fulfilment, repeated invoice creation, payment balance races, partial write recovery and calendar recurrence.
+5. Extend functional tests for payment balance races, partial write recovery, task assignment/execution and calendar recurrence.
 6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
