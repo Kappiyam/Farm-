@@ -274,11 +274,20 @@ function erpAppendRaw_(name,record,schema){
 function erpActor_(){try{return Session.getActiveUser().getEmail()||"owner";}catch(e){return "owner";}}
 function erpActive_(status){return ["inactive","archived","cancelled","void"].indexOf(String(status||"active").toLowerCase())<0;}
 function erpIdempotentResult_(key){
-  if(!key)return null;var rows=erpReadTable_("IdempotencyKeys"),r=rows.find(function(x){return String(x.request_key)===String(key);});
-  if(!r)return null;try{return JSON.parse(r.result_json);}catch(e){return {ok:true,replayed:true};}
+  if(!key)return null;
+  var rows=erpReadTable_("IdempotencyKeys"),r=rows.find(function(x){return String(x.request_key)===String(key);});
+  if(!r)return null;
+  var status=String(r.status||"").toLowerCase();
+  if(status==="in_progress"||status==="failed")throw new Error("A previous attempt for this request key did not complete cleanly. Do not retry blindly; inspect the related records and reconcile the operation first.");
+  if(status&&status!=="completed")throw new Error("Unknown idempotency state for this request. Manual reconciliation is required.");
+  try{return JSON.parse(r.result_json);}catch(e){return {ok:true,replayed:true};}
 }
 function erpStoreIdempotency_(key,action,result){
-  if(!key)return;erpAppend_("IdempotencyKeys",{request_key:key,action:action,result_json:JSON.stringify(result),created_at:new Date().toISOString()});
+  if(!key)return;
+  var existing=erpReadTable_("IdempotencyKeys").find(function(x){return String(x.request_key)===String(key);});
+  var patch={action:action,result_json:JSON.stringify(result),status:"completed",completed_at:new Date().toISOString(),error_message:""};
+  if(existing)erpUpdateByKey_("IdempotencyKeys","idempotency_id",existing.idempotency_id,patch);
+  else erpAppend_("IdempotencyKeys",Object.assign({request_key:key,started_at:new Date().toISOString(),created_at:new Date().toISOString()},patch));
 }
 
 function erpArchive(tableName,id,reason){return erpRunLockedWorkflow_("erpArchive",null,function(){return erpArchiveUnlocked_(tableName,id,reason);});}
