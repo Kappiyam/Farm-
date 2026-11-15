@@ -83,6 +83,13 @@ throws(()=>context.erpPostLedger("InventoryTransactions",{farm_id:"F-1",quantity
 throws(()=>context.erpPostLedger("TaskExecution",{farm_id:"F-1",quantity:1}),"Task execution must use the task execution workflow.");
 throws(()=>context.erpSave("StockLots",{farm_id:"F-1",item_id:"I-1",quantity_available:999}),"Stock lots must only be modified by inventory workflows.");
 
+// Archive requests are idempotent: a replay must not append a second audit entry.
+seed("Sites",{site_id:"SITE-ARCHIVE",farm_id:"F-1",site_name:"Archive test",status:"active"});
+context.erpArchive("Sites","SITE-ARCHIVE","test archive","archive-site-once");
+const archiveAuditCount=rows("AuditLog").filter(x=>String(x.record_id)==="SITE-ARCHIVE"&&String(x.action)==="archive").length;
+context.erpArchive("Sites","SITE-ARCHIVE","test archive","archive-site-once");
+assert(rows("AuditLog").filter(x=>String(x.record_id)==="SITE-ARCHIVE"&&String(x.action)==="archive").length===archiveAuditCount,"Archive replay must not duplicate audit entries.");
+
 // Safe direct ledger entries remain validated and append-only.
 throws(()=>context.erpPostLedger("FinanceEntries",{farm_id:"F-1",entry_date:"2026-11-15",entry_type:"expense",amount:-10}),"Negative finance amounts must be rejected.");
 assert(rows("FinanceEntries").length===0,"Rejected finance ledger entries must not be written.");
