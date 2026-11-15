@@ -146,7 +146,7 @@ context.erpReceiveProcurement(procurement.procurement_id,receipts,"procurement-r
 assert(rows("StockLots").filter(x=>x.lot_code==="BATCH-A").length===1,"Same batch rows should aggregate to one stock lot.");
 assert(Number(rows("ProcurementLines").find(x=>x.procurement_line_id===procurementLine.procurement_line_id).quantity_received)===10,"Receipt quantity should reconcile to the inventory ledger.");
 // Produce traceability, fulfilment aggregation and invoice/payment lifecycle.
-const crop=save("Crops",{crop_name:"Test papaya",crop_code:"PAP-TEST"});
+const crop=save("Crops",{crop_name:"Test papaya",crop_category:"fruit"});
 const customer=save("Customers",{customer_name:"Test kitchen",phone:"9000000002",status:"active"});
 const product=save("Products",{product_name:"Papaya",base_unit:"kg",crop_id:crop.crop_id,grade:"A",status:"active"});
 const salesOrder=save("SalesOrders",{farm_id:farm1.farm_id,customer_id:customer.customer_id,order_date:"2026-11-15",
