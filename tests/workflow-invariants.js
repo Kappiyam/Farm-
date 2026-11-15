@@ -82,6 +82,12 @@ throws(()=>context.erpPostLedger("Payments",{farm_id:"F-1",amount:1}),"Payments 
 throws(()=>context.erpPostLedger("InventoryTransactions",{farm_id:"F-1",quantity:1}),"Inventory transactions must use a stock workflow.");
 throws(()=>context.erpPostLedger("TaskExecution",{farm_id:"F-1",quantity:1}),"Task execution must use the task execution workflow.");
 
+// Safe direct ledger entries remain validated and append-only.
+throws(()=>context.erpPostLedger("FinanceEntries",{farm_id:"F-1",entry_date:"2026-11-15",entry_type:"expense",amount:-10}),"Negative finance amounts must be rejected.");
+assert(rows("FinanceEntries").length===0,"Rejected finance ledger entries must not be written.");
+context.erpPostLedger("FinanceEntries",{farm_id:"F-1",entry_date:"2026-11-15",entry_type:"expense",amount:10,category:"test"});
+assert(rows("FinanceEntries").length===1,"Valid finance ledger entries should be appendable.");
+
 // Generic saves must not silently discard fields or create records with caller-supplied unknown keys.
 throws(()=>context.erpSave("Sites",{farm_id:"F-1",site_name:"Test site",unexpected_field:"bad"}),"Unknown save fields must be rejected.");
 throws(()=>context.erpSave("Sites",{site_id:"NONEXISTENT",farm_id:"F-1",site_name:"Test site"}),"Unknown supplied primary keys must not create records.");
