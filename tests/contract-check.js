@@ -47,7 +47,7 @@ function countTopLevelArgs(source) {
   let count = 1, depth = 0, quote = "", escaped = false;
   for (let i = 0; i < source.length; i++) {
     const c = source[i];
-    if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
+    if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
     if (c === "'" || c === '"' || c === "`") { quote = c; continue; }
     if ("([{".includes(c)) depth++;
     else if (")]}".includes(c)) depth--;
@@ -57,14 +57,14 @@ function countTopLevelArgs(source) {
 }
 function callSites(source) {
   const sites = [];
-  const re = /\\bcall\\(["']([A-Za-z_$][\\w$]*)["'](\\s*,)?/g;
+  const re = /\bcall\(["']([A-Za-z_$][\w$]*)["'](\s*,)?/g;
   let match;
   while ((match = re.exec(source))) {
     let depth = 1, quote = "", escaped = false, end = re.lastIndex;
     if (!match[2]) { sites.push({name:match[1],args:0}); continue; }
     for (; end < source.length; end++) {
       const c = source[end];
-      if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
+      if (quote) { if (escaped) { escaped = false; continue; } if (c === "\\") { escaped = true; continue; } if (c === quote) quote = ""; continue; }
       if (c === "'" || c === '"' || c === "`") { quote = c; continue; }
       if (c === "(") depth++;
       if (c === ")" && --depth === 0) break;
@@ -74,7 +74,7 @@ function callSites(source) {
   return sites;
 }
 const parameterCounts = {};
-for (const match of backend.matchAll(/function\\s+([A-Za-z_$][\\w$]*)\\s*\\(([^)]*)\\)/g)) {
+for (const match of backend.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)/g)) {
   parameterCounts[match[1]] = countTopLevelArgs(match[2]);
 }
 for (const site of callSites(app)) {
