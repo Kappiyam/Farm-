@@ -269,7 +269,7 @@ function erpReport(reportKey, filters) {
   filters=filters||{};var start=filters.startDate||"0000-01-01",end=filters.endDate||"9999-12-31",farmId=filters.farmId;
   if(reportKey==="integrity"){
     var integrity=erpGetWorkflowIntegrityReport(farmId);
-    return {ok:true,report:"integrity",period:{start:start,end:end},summary:{issues:integrity.issueCount,checks:integrity.checkCount,passed:integrity.issueCount===0},rows:integrity.issues,methodology:integrity.methodology};
+    return {ok:true,report:"integrity",period:{start:"All records",end:"All records"},summary:{issues:integrity.issueCount,checks:integrity.checkCount,passed:integrity.issueCount===0},rows:integrity.issues,methodology:integrity.methodology};
   }
   var map={production:"CropCycles",tasks:"Tasks",workforce:"Attendance",inventory:"StockLots",harvest:"HarvestSessions",sales:"SalesOrders",finance:"FinanceEntries",assets:"Assets","crop-profitability":"CostAllocations"};
   var table=map[reportKey];if(!table)throw new Error("Unsupported report type.");
