@@ -329,7 +329,7 @@ function erpStoreIdempotency_(key,action,result){
 
 function erpArchive(tableName,id,reason,requestKey){return erpRunLockedWorkflow_("erpArchive",requestKey,function(){return erpArchiveUnlocked_(tableName,id,reason);});}
 
-function erpUpdateTaskStatus(taskId,status,reason){return erpRunLockedWorkflow_("erpUpdateTaskStatus",null,function(){return erpUpdateTaskStatusUnlocked_(taskId,status,reason);});}
+function erpUpdateTaskStatus(taskId,status,reason,requestKey){return erpRunLockedWorkflow_("erpUpdateTaskStatus",requestKey,function(){return erpUpdateTaskStatusUnlocked_(taskId,status,reason);});}
 
 function erpAssignTask(taskId,assignments,requestKey){return erpRunLockedWorkflow_("erpAssignTask",requestKey,function(){return erpAssignTaskUnlocked_(taskId,assignments,null);});}
 
