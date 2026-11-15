@@ -67,7 +67,14 @@ const context={
     },
     parseDate:(value,tz,format)=>new Date(value)
   },
-  CacheService:{getScriptCache:()=>({remove:()=>{},get:()=>null,put:()=>{}})}
+  CacheService:{getScriptCache:()=>({remove:()=>{},get:()=>null,put:()=>{}})},
+  PropertiesService:{
+    getScriptProperties:()=>{
+      const values=context.__scriptProperties||(context.__scriptProperties={});
+      return {getProperty:key=>Object.prototype.hasOwnProperty.call(values,key)?values[key]:null,
+        setProperty:(key,value)=>{values[key]=String(value);return this;}};
+    }
+  }
 };
 vm.createContext(context);
 const backendFiles=fs.readdirSync(path.join(root,"backend")).filter(f=>f.endsWith(".gs")).sort();
