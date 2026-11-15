@@ -27,6 +27,7 @@ This plan is for a disposable Google Sheet only. Do not run these tests against 
 | Task assignment | Assign an active farm member and a farm team | Assignment rows are farm-scoped and replay-safe |
 | Task execution | Record worker actuals twice using the same request key | One set of execution rows; task status updates correctly |
 | Procurement | Receive multiple quantities against one order line | Received quantity is cumulative and cannot exceed ordered quantity |
+| Inventory issue | Issue stock from a lot to a farm/plot use | Available quantity is reduced once; over-issue and cross-farm destination are rejected |
 | Harvest | Finalise a harvest session | Harvest lines and traceable produce lots are created once |
 | Fulfilment | Fulfil multiple order lines from the same produce lot | Aggregate lot availability is enforced; no over-dispatch |
 | Invoicing | Create invoice from fulfilled quantities | Only uninvoiced fulfilled quantities are invoiced |
