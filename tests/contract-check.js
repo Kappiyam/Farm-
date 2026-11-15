@@ -93,7 +93,7 @@ const lookupMapBlock = (app.match(/const lookupMap\\s*=\\s*\\{([\\s\\S]*?)\\};/)
 const lookupTables = new Set([...lookupMapBlock.matchAll(/:\\s*"([A-Za-z][A-Za-z0-9]*)"/g)].map(m => m[1]));
 for (const table of lookupTables) check(schemaTables.has(table), "Lookup references missing canonical table: " + table);
 
-const fieldTableBlock = (app.match(/const fieldTables\\s*=\\s*new Set\\(\\[([\\s\\S]*?)\\]\\);/) || ["",""])[1];
+const fieldTableBlock = (app.match(/const fieldTables\s*=\s*new Set\(\[([\s\S]*?)\]\);/) || ["",""])[1];
 const fieldTables = new Set([...fieldTableBlock.matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map(m => m[1]));
 for (const table of fieldTables) check(schemaTables.has(table), "Field editor references missing canonical table: " + table);
 
