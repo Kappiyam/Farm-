@@ -482,9 +482,17 @@ function erpSave(table,record,idempotencyKey){
 }
 
 function erpArchive(table,id,reason,requestKey){
+  if(!requestKey)throw new Error("A stable archive request key is required.");
   if(!ERP_ARCHIVABLE.has(table))throw new Error("This record type must be corrected or cancelled through its own workflow, not archived.");
   const data=erpList(table,{limit:1000,filter:{[ERP_KEYS[table]]:id}});
   if(!data.rows.length)throw new Error("Record not found.");
+  const prior=erpFindOne_("IdempotencyKeys",{idempotency_key:requestKey});
+  if(prior){
+    if(String(prior.operation_type)!=="save:"+table)throw new Error("Archive request key was already used by another operation.");
+    if(String(prior.status)==="complete"&&String(prior.result_id)===String(id))
+      return {ok:true,table:table,id:id,created:false,duplicate:true,record:data.rows[0]};
+    throw new Error("The earlier archive request did not complete. Review this record before retrying.");
+  }
   const record=data.rows[0];
   if(!("status" in record))throw new Error("This record type cannot be archived.");
   record.status="inactive";
