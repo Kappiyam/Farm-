@@ -71,7 +71,7 @@ const context={
 };
 vm.createContext(context);
 const backendFiles=fs.readdirSync(path.join(root,"backend")).filter(f=>f.endsWith(".gs")).sort();
-const source=backendFiles.map(f=>"\\n// "+f+"\\n"+fs.readFileSync(path.join(root,"backend",f),"utf8")).join("\\n");
+const source=backendFiles.map(f=>"\n// "+f+"\n"+fs.readFileSync(path.join(root,"backend",f),"utf8")).join("\n");
 vm.runInContext(source,context,{filename:"FarmERP canonical Apps Script"});
 const schema=vm.runInContext("ERP_TABLES",context);
 
