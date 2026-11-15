@@ -116,6 +116,11 @@ const invoiceResult=context.erpCreateInvoiceFromOrder("SO-1","2026-12-15","inv-o
 context.erpCreateInvoiceFromOrder("SO-1","2026-12-15","inv-once");
 assert(rows("Invoices").length===1&&rows("InvoiceLines").length===1,"Invoice replay must not duplicate invoice records.");
 const invoice=invoiceResult.invoice;
+throws(()=>context.erpRecordCustomerPayment(invoice.invoice_id,{amount:10,payment_date:"15-11-2026",payment_method:"cash"},"pay-bad-date"),"Invalid payment dates must be rejected.");
+throws(()=>context.erpRecordCustomerPayment(invoice.invoice_id,{amount:10,payment_date:"2026-11-15",payment_method:"crypto"},"pay-bad-method"),"Unsupported payment methods must be rejected.");
+seed("PaymentAccounts",{account_id:"ACC-OTHER",farm_id:"F-2",account_name:"Other farm account",status:"active"});
+throws(()=>context.erpRecordCustomerPayment(invoice.invoice_id,{amount:10,payment_date:"2026-11-15",payment_method:"cash",account_id:"ACC-OTHER"},"pay-wrong-farm"),"Payment accounts from another farm must be rejected.");
+assert(rows("Payments").length===0,"Rejected payment attempts must not create payment rows.");
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 context.erpRecordCustomerPayment(invoice.invoice_id,{amount:100,payment_date:"2026-11-15",payment_method:"cash"},"pay-once");
 assert(rows("Payments").length===1,"Payment replay must not duplicate payment records.");
