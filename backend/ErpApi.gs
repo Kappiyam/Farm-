@@ -7,7 +7,7 @@ const ERP_LEDGER_TABLES = Object.freeze([
 ]);
 const ERP_WORKFLOW_TABLES = Object.freeze([
   "HarvestLines","ProduceLotMovements","FulfilmentLines","InvoiceLines",
-  "Payments","InventoryTransactions","TaskExecution","IdempotencyKeys","AuditLog"
+  "Payments","InventoryTransactions","StockLots","TaskExecution","IdempotencyKeys","AuditLog"
 ]);
 
 function erpBootstrap() {
