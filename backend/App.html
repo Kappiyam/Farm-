@@ -367,7 +367,7 @@
       if(!receipts.length){toast("Enter at least one received quantity.",true);btn.disabled=false;btn.textContent="Confirm receipt";return;}
       if(receipts.some(x=>!x.lot_code)){toast("Lot/batch code is required for each received line.",true);btn.disabled=false;btn.textContent="Confirm receipt";return;}
       try{
-        const result=await call("erpReceiveProcurement",procurementId,receipts);
+        const result=await call("erpReceiveProcurement",procurementId,receipts,"procurement-receipt:"+procurementId+":"+receiptReference);
         close();toast("Receipt saved · "+result.status.replace(/_/g," "));
         state.lookups={};fetchRows();
       }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Confirm receipt";}
@@ -453,7 +453,7 @@
       })).filter(x=>x.quantity>0);
       if(!fulfilLines.length||fulfilLines.some(x=>!x.produce_lot_id)){toast("Select a produce lot and enter a quantity for each line.",true);btn.disabled=false;btn.textContent="Save fulfilment";return;}
       try{
-        const result=await call("erpFulfilSalesOrder",orderId,fulfilmentReference,fulfilLines,new Date().toISOString());
+        const result=await call("erpFulfilSalesOrder",orderId,fulfilmentReference,fulfilLines,new Date().toISOString(),"fulfilment:"+fulfilmentReference);
         close();toast("Fulfilment saved · "+result.orderStatus.replace(/_/g," "));state.lookups={};fetchRows();
       }catch(err){toast(err.message,true);btn.disabled=false;btn.textContent="Save fulfilment";}
     };
@@ -503,10 +503,11 @@
   dialog.innerHTML='<div class="dialog-body"><div class="dialog-head"><div><p>SALES / ACCOUNTS</p><h2>Create invoice</h2><p>Invoice only quantities already fulfilled and not previously invoiced.</p></div><button type="button" class="icon-btn" id="invoice-close">×</button></div><div class="field"><label>Due date</label><input type="date" id="invoice-due" value="'+defaultDue.toISOString().slice(0,10)+'"></div><div class="dialog-actions"><button class="btn secondary" id="invoice-cancel">Cancel</button><button class="btn primary" id="invoice-create">Create invoice</button></div></div>';
   document.body.append(dialog);dialog.showModal();const close=()=>dialog.close();
   $("#invoice-close",dialog).onclick=close;$("#invoice-cancel",dialog).onclick=close;dialog.addEventListener("close",()=>dialog.remove());
+  const invoiceRequestKey="invoice:"+orderId+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
   $("#invoice-create",dialog).onclick=async()=>{
     const b=$("#invoice-create",dialog);b.disabled=true;b.textContent="Creating…";
     try{
-      const result=await call("erpCreateInvoiceFromOrder",orderId,$("#invoice-due",dialog).value);
+      const result=await call("erpCreateInvoiceFromOrder",orderId,$("#invoice-due",dialog).value,invoiceRequestKey);
       close();toast("Invoice "+result.invoice.invoice_number+" created · "+result.total+" "+(result.currency||""));
       state.table="Invoices";state.view="sales";go("sales");
     }catch(e){toast(e.message,true);b.disabled=false;b.textContent="Create invoice";}
