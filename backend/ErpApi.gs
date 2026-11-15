@@ -157,7 +157,8 @@ function erpUpdateTaskStatusUnlocked_(taskId,status,reason) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
   var transitions={planned:["assigned","cancelled"],assigned:["in_progress","blocked","planned","cancelled"],in_progress:["blocked","completed","assigned"],blocked:["in_progress","cancelled"],completed:[],deferred:["planned","assigned","cancelled"],cancelled:[]};
   var current=String(task.status||"planned").toLowerCase();
-  if(current!==String(status).toLowerCase()&&(!transitions[current]||transitions[current].indexOf(String(status).toLowerCase())<0))throw new Error("Invalid task status transition: "+current+" → "+status+".");
+  if(current===String(status).toLowerCase())return {ok:true,status:current,task:task,unchanged:true};
+  if(!transitions[current]||transitions[current].indexOf(String(status).toLowerCase())<0)throw new Error("Invalid task status transition: "+current+" → "+status+".");
   var result=erpUpdateByKey_("Tasks","task_id",taskId,{status:status,updated_at:new Date().toISOString()});
   erpAppend_("TaskStatusHistory",{farm_id:task.farm_id,task_id:taskId,from_status:task.status||"",to_status:status,changed_at:new Date().toISOString(),reason:reason||"",changed_by:erpActor_()});
   erpAudit_("Tasks",taskId,"status_change",{from:task.status,to:status,reason:reason||""});
