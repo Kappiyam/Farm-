@@ -70,7 +70,7 @@ for(const [name,definition] of Object.entries(vm.runInContext('ERP_TABLE_DEFINIT
   ss.sheets[name]=sheet;
 }
 function seed(table,row){
-  const headers=context.ERP_TABLE_DEFINITIONS[table].split("|");
+  const headers=vm.runInContext('ERP_TABLE_DEFINITIONS',context)[table].split("|");
   ss.getSheetByName(table).appendRow(headers.map(h=>row[h]===undefined?"":row[h]));
 }
 function rows(table){return context.erpReadTable_(table);}
