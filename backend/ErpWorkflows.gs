@@ -3,126 +3,163 @@
  * Each workflow validates source records and uses idempotency where supplied.
  */
 
-function erpReceiveProcurement(procurementId, receipts) {
-  var order=erpFindByKey_("ProcurementOrders","procurement_id",procurementId);
-  if(!order)throw new Error("Procurement order not found.");
-  var lines=erpReadTable_("ProcurementLines"),created=[],receivedByLine={};
-  (receipts||[]).forEach(function(r){
-    var line=lines.find(function(x){return String(x.procurement_line_id)===String(r.procurement_line_id)&&String(x.procurement_id)===String(procurementId);});
-    if(!line)throw new Error("A receipt line does not belong to this procurement order.");
-    var qty=Number(r.quantity)||0, outstanding=(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0);
-    if(!(qty>0)||qty>outstanding+0.000001)throw new Error("Receipt quantity must be positive and cannot exceed outstanding quantity.");
-    var lot=erpAppend_("StockLots",{farm_id:order.farm_id,item_id:line.item_id,lot_code:r.lot_code,
-      received_date:new Date().toISOString().slice(0,10),expiry_date:r.expiry_date||"",quantity_received:qty,
-      quantity_available:qty,unit:line.unit,unit_cost:Number(r.unit_cost)||Number(line.unit_cost)||0,
-      supplier_id:order.supplier_id,storage_location:r.storage_location||line.storage_location||"",status:"active",
-      reference_type:"procurement_receipt",reference_id:r.receipt_reference||procurementId});
-    erpAppend_("InventoryTransactions",{farm_id:order.farm_id,item_id:line.item_id,lot_id:lot.lot_id,
-      transaction_type:"receipt",quantity:qty,unit:line.unit,transaction_at:new Date().toISOString(),
-      reference_type:"procurement",reference_id:procurementId,recorded_by:erpActor_(),notes:r.receipt_reference||""});
-    receivedByLine[line.procurement_line_id]=(receivedByLine[line.procurement_line_id]||0)+qty;
-    created.push(lot);
+function erpReceiveProcurement(procurementId, receipts, requestKey) {
+  return erpRunLockedWorkflow_("erpReceiveProcurement",requestKey,function(){
+    var order=erpFindByKey_("ProcurementOrders","procurement_id",procurementId);
+    if(!order)throw new Error("Procurement order not found.");
+    var lines=erpReadTable_("ProcurementLines").filter(function(x){return String(x.procurement_id)===String(procurementId);});
+    var requested={},prepared=[];
+    (receipts||[]).forEach(function(r){
+      var line=lines.find(function(x){return String(x.procurement_line_id)===String(r.procurement_line_id);});
+      if(!line)throw new Error("A receipt line does not belong to this procurement order.");
+      var qty=Number(r.quantity);
+      if(!isFinite(qty)||qty<=0)throw new Error("Receipt quantity must be positive.");
+      requested[line.procurement_line_id]=(requested[line.procurement_line_id]||0)+qty;
+      prepared.push({receipt:r,line:line,quantity:qty});
+    });
+    if(!prepared.length)throw new Error("At least one receipt line is required.");
+    Object.keys(requested).forEach(function(id){
+      var line=lines.find(function(x){return String(x.procurement_line_id)===String(id);});
+      var outstanding=(Number(line.quantity_ordered)||0)-(Number(line.quantity_received)||0);
+      if(requested[id]>outstanding+0.000001)throw new Error("Receipt quantity exceeds outstanding quantity for line "+id+".");
+    });
+    var created=[],receivedByLine={};
+    prepared.forEach(function(x){
+      var r=x.receipt,line=x.line,qty=x.quantity;
+      var lot=erpAppend_("StockLots",{farm_id:order.farm_id,item_id:line.item_id,lot_code:r.lot_code,
+        received_date:new Date().toISOString().slice(0,10),expiry_date:r.expiry_date||"",quantity_received:qty,
+        quantity_available:qty,unit:line.unit,unit_cost:Number(r.unit_cost)||Number(line.unit_cost)||0,
+        supplier_id:order.supplier_id,storage_location:r.storage_location||line.storage_location||"",status:"active",
+        reference_type:"procurement_receipt",reference_id:r.receipt_reference||procurementId});
+      erpAppend_("InventoryTransactions",{farm_id:order.farm_id,item_id:line.item_id,lot_id:lot.lot_id,
+        transaction_type:"receipt",quantity:qty,unit:line.unit,transaction_at:new Date().toISOString(),
+        reference_type:"procurement",reference_id:procurementId,recorded_by:erpActor_(),notes:r.receipt_reference||""});
+      receivedByLine[line.procurement_line_id]=(receivedByLine[line.procurement_line_id]||0)+qty;
+      created.push(lot);
+    });
+    Object.keys(receivedByLine).forEach(function(id){
+      var line=lines.find(function(x){return String(x.procurement_line_id)===String(id);});
+      erpUpdateByKey_("ProcurementLines","procurement_line_id",id,{quantity_received:(Number(line.quantity_received)||0)+receivedByLine[id],updated_at:new Date().toISOString()});
+    });
+    var refreshed=erpReadTable_("ProcurementLines").filter(function(x){return String(x.procurement_id)===String(procurementId);});
+    var complete=refreshed.every(function(x){return Number(x.quantity_received)>=Number(x.quantity_ordered)-0.000001;});
+    var any=refreshed.some(function(x){return Number(x.quantity_received)>0;});
+    var status=complete?"received":(any?"partially_received":"ordered");
+    erpUpdateByKey_("ProcurementOrders","procurement_id",procurementId,{status:status,updated_at:new Date().toISOString()});
+    return {ok:true,status:status,lots:created};
   });
-  Object.keys(receivedByLine).forEach(function(id){
-    var line=lines.find(function(x){return String(x.procurement_line_id)===String(id);});
-    erpUpdateByKey_("ProcurementLines","procurement_line_id",id,{quantity_received:(Number(line.quantity_received)||0)+receivedByLine[id],updated_at:new Date().toISOString()});
-  });
-  var refreshed=erpReadTable_("ProcurementLines").filter(function(x){return String(x.procurement_id)===String(procurementId);});
-  var complete=refreshed.every(function(x){return Number(x.quantity_received)>=Number(x.quantity_ordered)-0.000001;});
-  var any=refreshed.some(function(x){return Number(x.quantity_received)>0;});
-  var status=complete?"received":(any?"partially_received":"ordered");
-  erpUpdateByKey_("ProcurementOrders","procurement_id",procurementId,{status:status,updated_at:new Date().toISOString()});
-  return {ok:true,status:status,lots:created};
 }
 
 function erpFinalizeHarvest(harvestId, lines, requestKey) {
-  var prior=requestKey&&erpIdempotentResult_(requestKey);if(prior)return prior;
-  var session=erpFindByKey_("HarvestSessions","harvest_id",harvestId);
-  if(!session)throw new Error("Harvest session not found.");
-  if(String(session.status).toLowerCase()==="finalised"||String(session.status).toLowerCase()==="finalized")throw new Error("Harvest session is already finalised.");
-  if(!lines||!lines.length)throw new Error("At least one harvest line is required.");
-  var created=[];
-  lines.forEach(function(line){
-    var qty=Number(line.quantity)||0;if(!(qty>0)||!line.unit)throw new Error("Every harvest line needs a positive quantity and unit.");
-    var saved=erpAppend_("HarvestLines",Object.assign({},line,{farm_id:session.farm_id,harvest_id:harvestId}));
-    if(["sale","processing"].indexOf(String(line.disposition||"sale"))>=0){
-      var lot=erpAppend_("ProduceLots",{farm_id:session.farm_id,harvest_id:harvestId,harvest_line_id:saved.harvest_line_id,
-        crop_id:line.crop_id||"",variety_id:line.variety_id||"",lot_code:line.lot_code||("PL-"+saved.harvest_line_id.slice(0,8)),
-        grade:line.grade||"",quantity_received:qty,quantity_available:qty,unit:line.unit,
-        disposition:line.disposition||"sale",storage_location:line.storage_location||"",status:"active"});
-      saved.produce_lot_id=lot.produce_lot_id;
-    }
-    created.push(saved);
+  return erpRunLockedWorkflow_("erpFinalizeHarvest",requestKey,function(){
+    var session=erpFindByKey_("HarvestSessions","harvest_id",harvestId);
+    if(!session)throw new Error("Harvest session not found.");
+    if(["finalised","finalized"].indexOf(String(session.status).toLowerCase())>=0)throw new Error("Harvest session is already finalised.");
+    if(!lines||!lines.length)throw new Error("At least one harvest line is required.");
+    lines.forEach(function(line){var qty=Number(line.quantity);if(!isFinite(qty)||qty<=0||!line.unit)throw new Error("Every harvest line needs a positive quantity and unit.");});
+    var created=[];
+    lines.forEach(function(line){
+      var qty=Number(line.quantity);
+      var saved=erpAppend_("HarvestLines",Object.assign({},line,{farm_id:session.farm_id,harvest_id:harvestId}));
+      if(["sale","processing"].indexOf(String(line.disposition||"sale"))>=0){
+        var lot=erpAppend_("ProduceLots",{farm_id:session.farm_id,harvest_id:harvestId,harvest_line_id:saved.harvest_line_id,
+          crop_id:line.crop_id||"",variety_id:line.variety_id||"",lot_code:line.lot_code||("PL-"+saved.harvest_line_id.slice(0,8)),
+          grade:line.grade||"",quantity_received:qty,quantity_available:qty,unit:line.unit,
+          disposition:line.disposition||"sale",storage_location:line.storage_location||"",status:"active"});
+        saved.produce_lot_id=lot.produce_lot_id;
+      }
+      created.push(saved);
+    });
+    erpUpdateByKey_("HarvestSessions","harvest_id",harvestId,{status:"finalised",updated_at:new Date().toISOString()});
+    return {ok:true,lines:created};
   });
-  erpUpdateByKey_("HarvestSessions","harvest_id",harvestId,{status:"finalised",updated_at:new Date().toISOString()});
-  var result={ok:true,lines:created};if(requestKey)erpStoreIdempotency_(requestKey,"erpFinalizeHarvest",result);return result;
 }
 
-function erpFulfilSalesOrder(orderId, fulfilmentReference, fulfilLines, fulfilmentDate) {
-  var order=erpFindByKey_("SalesOrders","sales_order_id",orderId);if(!order)throw new Error("Sales order not found.");
-  var sourceLines=erpReadTable_("SalesOrderLines").filter(function(x){return String(x.sales_order_id)===String(orderId);});
-  var allFulfil=erpReadTable_("FulfilmentLines"),lots=erpReadTable_("ProduceLots");
-  var prepared=(fulfilLines||[]).map(function(x){
-    var line=sourceLines.find(function(y){return String(y.sales_line_id)===String(x.sales_line_id);});
-    var lot=lots.find(function(y){return String(y.produce_lot_id)===String(x.produce_lot_id);});
-    if(!line||!lot)throw new Error("Invalid sales line or produce lot.");
-    var fulfilled=allFulfil.filter(function(y){return String(y.sales_line_id)===String(line.sales_line_id);}).reduce(function(s,y){return s+(Number(y.quantity)||0);},0);
-    var remaining=(Number(line.quantity_ordered)||0)-fulfilled,qty=Number(x.quantity)||0;
-    if(!(qty>0)||qty>remaining+0.000001)throw new Error("Fulfilment quantity exceeds the order-line balance.");
-    if(String(lot.farm_id)!==String(order.farm_id)||String(lot.unit)!==String(line.unit)||String(lot.crop_id)!==String((erpFindByKey_("Products","product_id",line.product_id)||{}).crop_id))throw new Error("Produce lot does not match the order product, farm or unit.");
-    if(String(lot.status)!=="active"||qty>Number(lot.quantity_available)+0.000001)throw new Error("Insufficient available produce lot quantity.");
-    return {line:line,lot:lot,quantity:qty};
+function erpFulfilSalesOrder(orderId, fulfilmentReference, fulfilLines, fulfilmentDate, requestKey) {
+  return erpRunLockedWorkflow_("erpFulfilSalesOrder",requestKey,function(){
+    var order=erpFindByKey_("SalesOrders","sales_order_id",orderId);if(!order)throw new Error("Sales order not found.");
+    if(["cancelled","closed"].indexOf(String(order.status||"").toLowerCase())>=0)throw new Error("This sales order cannot be fulfilled.");
+    var sourceLines=erpReadTable_("SalesOrderLines").filter(function(x){return String(x.sales_order_id)===String(orderId);});
+    var allFulfil=erpReadTable_("FulfilmentLines"),lots=erpReadTable_("ProduceLots");
+    var prepared=[],byLine={},byLot={};
+    (fulfilLines||[]).forEach(function(x){
+      var line=sourceLines.find(function(y){return String(y.sales_line_id)===String(x.sales_line_id);});
+      var lot=lots.find(function(y){return String(y.produce_lot_id)===String(x.produce_lot_id);});
+      if(!line||!lot)throw new Error("Invalid sales line or produce lot.");
+      var qty=Number(x.quantity);if(!isFinite(qty)||qty<=0)throw new Error("Fulfilment quantity must be positive.");
+      var product=erpFindByKey_("Products","product_id",line.product_id)||{};
+      if(String(lot.farm_id)!==String(order.farm_id)||String(lot.unit)!==String(line.unit)||String(lot.crop_id)!==String(product.crop_id))throw new Error("Produce lot does not match the order product, farm or unit.");
+      if(String(lot.status)!=="active")throw new Error("Produce lot is not active.");
+      byLine[line.sales_line_id]=(byLine[line.sales_line_id]||0)+qty;
+      byLot[lot.produce_lot_id]=(byLot[lot.produce_lot_id]||0)+qty;
+      prepared.push({line:line,lot:lot,quantity:qty});
+    });
+    if(!prepared.length)throw new Error("No fulfilment quantities supplied.");
+    Object.keys(byLine).forEach(function(id){
+      var line=sourceLines.find(function(y){return String(y.sales_line_id)===String(id);});
+      var fulfilled=allFulfil.filter(function(y){return String(y.sales_line_id)===String(id);}).reduce(function(sum,y){return sum+(Number(y.quantity)||0);},0);
+      if(byLine[id]>(Number(line.quantity_ordered)||0)-fulfilled+0.000001)throw new Error("Fulfilment quantity exceeds the order-line balance.");
+    });
+    Object.keys(byLot).forEach(function(id){
+      var lot=lots.find(function(y){return String(y.produce_lot_id)===String(id);});
+      if(byLot[id]>(Number(lot.quantity_available)||0)+0.000001)throw new Error("Fulfilment quantity exceeds available quantity in produce lot "+id+".");
+    });
+    var fulfil=erpAppend_("Fulfilments",{farm_id:order.farm_id,sales_order_id:orderId,fulfilment_reference:fulfilmentReference||("FUL-"+Utilities.getUuid()),fulfilment_date:fulfilmentDate||new Date().toISOString(),status:"completed"});
+    prepared.forEach(function(x){
+      erpAppend_("FulfilmentLines",{fulfilment_id:fulfil.fulfilment_id,sales_order_id:orderId,sales_line_id:x.line.sales_line_id,produce_lot_id:x.lot.produce_lot_id,quantity:x.quantity,unit:x.line.unit});
+      erpAppend_("ProduceLotMovements",{farm_id:order.farm_id,produce_lot_id:x.lot.produce_lot_id,movement_type:"dispatch",quantity:x.quantity,unit:x.line.unit,reference_type:"fulfilment",reference_id:fulfil.fulfilment_id,moved_at:new Date().toISOString(),recorded_by:erpActor_()});
+    });
+    Object.keys(byLot).forEach(function(id){
+      var lot=lots.find(function(y){return String(y.produce_lot_id)===String(id);});
+      erpUpdateByKey_("ProduceLots","produce_lot_id",id,{quantity_available:Number(lot.quantity_available)-byLot[id]});
+    });
+    var latest=erpReadTable_("FulfilmentLines"),done=sourceLines.every(function(l){
+      var total=latest.filter(function(x){return String(x.sales_line_id)===String(l.sales_line_id);}).reduce(function(sum,x){return sum+(Number(x.quantity)||0);},0);
+      return total>=Number(l.quantity_ordered)-0.000001;
+    });
+    var status=done?"fulfilled":"partially_fulfilled";
+    erpUpdateByKey_("SalesOrders","sales_order_id",orderId,{status:status,updated_at:new Date().toISOString()});
+    return {ok:true,fulfilment:fulfil,orderStatus:status};
   });
-  if(!prepared.length)throw new Error("No fulfilment quantities supplied.");
-  var fulfil=erpAppend_("Fulfilments",{farm_id:order.farm_id,sales_order_id:orderId,fulfilment_reference:fulfilmentReference||("FUL-"+Utilities.getUuid()),fulfilment_date:fulfilmentDate||new Date().toISOString(),status:"completed"});
-  prepared.forEach(function(x){
-    erpAppend_("FulfilmentLines",{fulfilment_id:fulfil.fulfilment_id,sales_order_id:orderId,sales_line_id:x.line.sales_line_id,produce_lot_id:x.lot.produce_lot_id,quantity:x.quantity,unit:x.line.unit});
-    erpUpdateByKey_("ProduceLots","produce_lot_id",x.lot.produce_lot_id,{quantity_available:Number(x.lot.quantity_available)-x.quantity});
-    erpAppend_("ProduceLotMovements",{farm_id:order.farm_id,produce_lot_id:x.lot.produce_lot_id,movement_type:"dispatch",quantity:x.quantity,unit:x.line.unit,reference_type:"fulfilment",reference_id:fulfil.fulfilment_id,moved_at:new Date().toISOString(),recorded_by:erpActor_()});
-  });
-  var latest=erpReadTable_("FulfilmentLines"),done=sourceLines.every(function(l){
-    var total=latest.filter(function(x){return String(x.sales_line_id)===String(l.sales_line_id);}).reduce(function(s,x){return s+(Number(x.quantity)||0);},0);
-    return total>=Number(l.quantity_ordered)-0.000001;
-  });
-  var status=done?"fulfilled":"partially_fulfilled";
-  erpUpdateByKey_("SalesOrders","sales_order_id",orderId,{status:status,updated_at:new Date().toISOString()});
-  return {ok:true,fulfilment:fulfil,orderStatus:status};
 }
 
-function erpCreateInvoiceFromOrder(orderId, dueDate) {
-  var order=erpFindByKey_("SalesOrders","sales_order_id",orderId);if(!order)throw new Error("Sales order not found.");
-  var lines=erpReadTable_("SalesOrderLines").filter(function(x){return String(x.sales_order_id)===String(orderId);});
-  var fulfilled=erpReadTable_("FulfilmentLines"),already=erpReadTable_("InvoiceLines");
-  var invoiceLines=[];
-  lines.forEach(function(line){
-    var qty=fulfilled.filter(function(x){return String(x.sales_line_id)===String(line.sales_line_id);}).reduce(function(s,x){return s+(Number(x.quantity)||0);},0);
-    var billed=already.filter(function(x){return String(x.sales_line_id)===String(line.sales_line_id);}).reduce(function(s,x){return s+(Number(x.quantity)||0);},0);
-    var available=Math.max(0,qty-billed);
-    if(available>0)invoiceLines.push({sales_line_id:line.sales_line_id,description:line.description||"",quantity:available,unit:line.unit,unit_price:Number(line.unit_price)||0,tax_rate:Number(line.tax_rate)||0,line_total:available*(Number(line.unit_price)||0)});
+function erpCreateInvoiceFromOrder(orderId, dueDate, requestKey) {
+  return erpRunLockedWorkflow_("erpCreateInvoiceFromOrder",requestKey,function(){
+    var order=erpFindByKey_("SalesOrders","sales_order_id",orderId);if(!order)throw new Error("Sales order not found.");
+    var lines=erpReadTable_("SalesOrderLines").filter(function(x){return String(x.sales_order_id)===String(orderId);});
+    var fulfilled=erpReadTable_("FulfilmentLines"),already=erpReadTable_("InvoiceLines");
+    var invoiceLines=[];
+    lines.forEach(function(line){
+      var qty=fulfilled.filter(function(x){return String(x.sales_line_id)===String(line.sales_line_id);}).reduce(function(sum,x){return sum+(Number(x.quantity)||0);},0);
+      var billed=already.filter(function(x){return String(x.sales_line_id)===String(line.sales_line_id);}).reduce(function(sum,x){return sum+(Number(x.quantity)||0);},0);
+      var available=Math.max(0,qty-billed);
+      if(available>0)invoiceLines.push({sales_line_id:line.sales_line_id,description:line.description||"",quantity:available,unit:line.unit,unit_price:Number(line.unit_price)||0,tax_rate:Number(line.tax_rate)||0,line_total:available*(Number(line.unit_price)||0)});
+    });
+    if(!invoiceLines.length)throw new Error("No fulfilled, uninvoiced quantities are available.");
+    var subtotal=invoiceLines.reduce(function(sum,x){return sum+x.line_total;},0);
+    var tax=invoiceLines.reduce(function(sum,x){return sum+x.line_total*(x.tax_rate/100);},0);
+    var number="INV-"+Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"yyyyMMdd")+"-"+Utilities.getUuid().slice(0,6).toUpperCase();
+    var invoice=erpAppend_("Invoices",{farm_id:order.farm_id,customer_id:order.customer_id,sales_order_id:orderId,invoice_number:number,
+      invoice_date:new Date().toISOString().slice(0,10),due_date:dueDate||"",currency_code:order.currency_code||"INR",
+      subtotal:subtotal,tax_amount:tax,total_amount:subtotal+tax,status:"issued",created_by:erpActor_()});
+    invoiceLines.forEach(function(x){erpAppend_("InvoiceLines",Object.assign({},x,{invoice_id:invoice.invoice_id}));});
+    return {ok:true,invoice:invoice,total:subtotal+tax,currency:invoice.currency_code};
   });
-  if(!invoiceLines.length)throw new Error("No fulfilled, uninvoiced quantities are available.");
-  var subtotal=invoiceLines.reduce(function(s,x){return s+x.line_total;},0);
-  var tax=invoiceLines.reduce(function(s,x){return s+x.line_total*(x.tax_rate/100);},0);
-  var number="INV-"+Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"yyyyMMdd")+"-"+Utilities.getUuid().slice(0,6).toUpperCase();
-  var invoice=erpAppend_("Invoices",{farm_id:order.farm_id,customer_id:order.customer_id,sales_order_id:orderId,invoice_number:number,
-    invoice_date:new Date().toISOString().slice(0,10),due_date:dueDate||"",currency_code:order.currency_code||"INR",
-    subtotal:subtotal,tax_amount:tax,total_amount:subtotal+tax,status:"issued",created_by:erpActor_()});
-  invoiceLines.forEach(function(x){erpAppend_("InvoiceLines",Object.assign({},x,{invoice_id:invoice.invoice_id}));});
-  return {ok:true,invoice:invoice,total:subtotal+tax,currency:invoice.currency_code};
 }
 
 function erpRecordCustomerPayment(invoiceId, payment, requestKey) {
-  var prior=requestKey&&erpIdempotentResult_(requestKey);if(prior)return prior;
-  var invoice=erpFindByKey_("Invoices","invoice_id",invoiceId);if(!invoice)throw new Error("Invoice not found.");
-  var amount=Number(payment&&payment.amount)||0;if(!(amount>0))throw new Error("Payment amount must be positive.");
-  var received=erpReadTable_("Payments").filter(function(p){return String(p.invoice_id)===String(invoiceId);}).reduce(function(s,p){return s+(Number(p.amount)||0);},0);
-  var balance=Math.max(0,Number(invoice.total_amount)-received);
-  if(amount>balance+0.000001)throw new Error("Payment exceeds outstanding invoice balance.");
-  var saved=erpAppend_("Payments",Object.assign({},payment,{farm_id:invoice.farm_id,invoice_id:invoiceId,customer_id:invoice.customer_id,recorded_by:erpActor_()}));
-  var newBalance=balance-amount,status=newBalance<=0.000001?"paid":"partially_paid";
-  erpUpdateByKey_("Invoices","invoice_id",invoiceId,{status:status,updated_at:new Date().toISOString()});
-  var result={ok:true,payment:saved,balanceDue:newBalance,currency:invoice.currency_code||"INR",status:status};
-  if(requestKey)erpStoreIdempotency_(requestKey,"erpRecordCustomerPayment",result);return result;
+  return erpRunLockedWorkflow_("erpRecordCustomerPayment",requestKey,function(){
+    var invoice=erpFindByKey_("Invoices","invoice_id",invoiceId);if(!invoice)throw new Error("Invoice not found.");
+    var amount=Number(payment&&payment.amount);
+    if(!isFinite(amount)||amount<=0)throw new Error("Payment amount must be positive.");
+    var received=erpReadTable_("Payments").filter(function(p){return String(p.invoice_id)===String(invoiceId);}).reduce(function(sum,p){return sum+(Number(p.amount)||0);},0);
+    var balance=Math.max(0,Number(invoice.total_amount)-received);
+    if(amount>balance+0.000001)throw new Error("Payment exceeds outstanding invoice balance.");
+    var saved=erpAppend_("Payments",Object.assign({},payment,{farm_id:invoice.farm_id,invoice_id:invoiceId,customer_id:invoice.customer_id,recorded_by:erpActor_()}));
+    var newBalance=balance-amount,status=newBalance<=0.000001?"paid":"partially_paid";
+    erpUpdateByKey_("Invoices","invoice_id",invoiceId,{status:status,updated_at:new Date().toISOString()});
+    return {ok:true,payment:saved,balanceDue:newBalance,currency:invoice.currency_code||"INR",status:status};
+  });
 }
 
 function erpCalculateProductionGap(farmId,startDate,endDate) {
@@ -235,4 +272,23 @@ function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt) {
   return erpAppend_("Tasks",{farm_id:event.farm_id,site_id:event.site_id,field_id:event.field_id,plot_id:event.plot_id,
     title:title||event.title,description:event.description,task_type:"calendar_follow_up",status:"planned",
     planned_start:occurrenceStart,due_at:dueAt||String(occurrenceStart).slice(0,10),created_by:erpActor_()});
+}
+
+/**
+ * Serialises multi-sheet workflows and replays completed requests by key.
+ * Apps Script Sheets writes are not atomic; this lock prevents concurrent
+ * interleaving but does not roll back a partial write after a service failure.
+ */
+function erpRunLockedWorkflow_(action,requestKey,work) {
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var prior=requestKey&&erpIdempotentResult_(requestKey);
+    if(prior)return prior;
+    var result=work();
+    if(requestKey)erpStoreIdempotency_(requestKey,action,result);
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
 }
