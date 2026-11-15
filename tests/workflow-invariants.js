@@ -230,6 +230,13 @@ const missingLotIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(missingLotIntegrity.issues.some(x=>x.entity_type==="FulfilmentLine"),"Integrity report must detect fulfilment lines referencing missing lots.");
 throws(()=>context.erpRunLockedWorkflow_("differentAction","pay-once",function(){return {ok:true};}),"A request key must not be reusable for a different workflow action.");
 
+// Task status transition writes are replay-safe with a caller request key.
+seed("Tasks",{task_id:"T-STATUS-IDEM",farm_id:"F-1",status:"planned",title:"Status idempotency"});
+context.erpUpdateTaskStatus("T-STATUS-IDEM","assigned","test","task-status-idem");
+const statusHistoryAfterFirst=rows("TaskStatusHistory").filter(x=>String(x.task_id)==="T-STATUS-IDEM").length;
+context.erpUpdateTaskStatus("T-STATUS-IDEM","assigned","test","task-status-idem");
+assert(rows("TaskStatusHistory").filter(x=>String(x.task_id)==="T-STATUS-IDEM").length===statusHistoryAfterFirst,"Task status request replay must not duplicate history.");
+
 // State transitions must reject impossible jumps.
 seed("Tasks",{task_id:"T-1",farm_id:"F-1",status:"planned",title:"Test task"});
 throws(()=>context.erpUpdateTaskStatus("T-1","completed","invalid jump"),"Planned task must not jump directly to completed.");
@@ -260,8 +267,8 @@ assert(rows("TaskExecution").filter(x=>String(x.task_id)==="T-1").length===1,"Ex
 // Crop task generation must remain duplicate-safe when the same cycle is generated twice.
 seed("CropCycles",{crop_cycle_id:"CC-1",farm_id:"F-1",crop_id:"CR-1",planting_date:"2026-11-01",status:"active"});
 seed("TaskTemplates",{template_id:"TT-1",farm_id:"F-1",crop_id:"CR-1",template_name:"First field check",task_type:"scouting",offset_days:7,default_priority:"normal",status:"active"});
-context.erpGenerateCropTasks("CC-1");
-context.erpGenerateCropTasks("CC-1");
+context.erpGenerateCropTasks("CC-1","crop-generation-replay");
+context.erpGenerateCropTasks("CC-1","crop-generation-replay");
 assert(rows("Tasks").filter(t=>String(t.crop_cycle_id)==="CC-1").length===1,"Repeated crop task generation must not duplicate template tasks.");
 
 // Schema migration must remain additive and preserve existing row data.
