@@ -3,6 +3,35 @@
  * Each workflow validates source records and uses idempotency where supplied.
  */
 
+
+function erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference) {
+  var lot=erpFindByKey_("StockLots","lot_id",lotId);
+  if(!lot||!erpActive_(lot.status))throw new Error("Active stock lot not found.");
+  var item=erpFindByKey_("InventoryItems","item_id",lot.item_id);
+  if(!item||String(item.farm_id)!==String(lot.farm_id)||!erpActive_(item.status))throw new Error("Stock item is not active for this farm.");
+  var qty=Number(quantity);
+  if(!isFinite(qty)||qty<=0)throw new Error("Issue quantity must be positive.");
+  var available=Number(lot.quantity_available)||0;
+  if(qty>available+0.000001)throw new Error("Issue quantity exceeds available stock.");
+  if(plotId){
+    var plot=erpFindByKey_("Plots","plot_id",plotId);
+    if(!plot||String(plot.farm_id)!==String(lot.farm_id)||!erpActive_(plot.status))throw new Error("Destination plot is not active for this farm.");
+  }
+  var remaining=available-qty;
+  erpUpdateByKey_("StockLots","lot_id",lotId,{quantity_available:remaining,status:remaining<=0.000001?"depleted":"active"});
+  var transaction=erpAppend_("InventoryTransactions",{farm_id:lot.farm_id,item_id:lot.item_id,lot_id:lotId,
+    transaction_type:"issue",quantity:qty,unit:lot.unit,transaction_at:new Date().toISOString(),
+    location_id:plotId||"",reference_type:"farm_use",reference_id:reference||plotId||lotId,
+    recorded_by:erpActor_(),notes:notes||""});
+  return {ok:true,transaction:transaction,remaining:remaining,unit:lot.unit};
+}
+
+function erpIssueInventoryLot(lotId,quantity,plotId,notes,reference,requestKey) {
+  return erpRunLockedWorkflow_("erpIssueInventoryLot",requestKey,function(){
+    return erpIssueInventoryLotUnlocked_(lotId,quantity,plotId,notes,reference);
+  });
+}
+
 function erpReceiveProcurement(procurementId, receipts, requestKey) {
   return erpRunLockedWorkflow_("erpReceiveProcurement",requestKey,function(){
     var order=erpFindByKey_("ProcurementOrders","procurement_id",procurementId);
