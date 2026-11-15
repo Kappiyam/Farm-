@@ -402,7 +402,7 @@ function erpUpdateCalendarEventUnlocked_(eventId,scope,occurrenceStart,patch,rea
   return {ok:true,scope:"series",updated:updated};
 }
 
-function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt) {
+function erpCreateTaskFromCalendarEventUnlocked_(eventId,occurrenceStart,title,dueAt) {
   var event=erpFindByKey_("CalendarEvents","event_id",eventId);if(!event)throw new Error("Calendar event not found.");
   return erpAppend_("Tasks",{farm_id:event.farm_id,site_id:event.site_id,field_id:event.field_id,plot_id:event.plot_id,
     title:title||event.title,description:event.description,task_type:"calendar_follow_up",status:"planned",
@@ -463,3 +463,5 @@ function erpRunLockedWorkflow_(action,requestKey,work) {
 function erpCancelCalendarOccurrence(eventId,occurrenceStart,reason,requestKey){return erpRunLockedWorkflow_("erpCancelCalendarOccurrence",requestKey,function(){return erpCancelCalendarOccurrenceUnlocked_(eventId,occurrenceStart,reason);});}
 
 function erpUpdateCalendarEvent(eventId,scope,occurrenceStart,patch,reason,requestKey){return erpRunLockedWorkflow_("erpUpdateCalendarEvent",requestKey,function(){return erpUpdateCalendarEventUnlocked_(eventId,scope,occurrenceStart,patch,reason);});}
+
+function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt,requestKey){return erpRunLockedWorkflow_("erpCreateTaskFromCalendarEvent",requestKey,function(){return erpCreateTaskFromCalendarEventUnlocked_(eventId,occurrenceStart,title,dueAt);});}
