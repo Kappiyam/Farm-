@@ -89,6 +89,11 @@ const tableGroupBlock = (app.match(/const tableGroups\s*=\s*\{([\s\S]*?)\n \};/)
 const uiTables = new Set([...tableGroupBlock.matchAll(/\["[^"]+","([A-Za-z][A-Za-z0-9]*)"\]/g)].map(m => m[1]));
 for (const table of uiTables) check(schemaTables.has(table), "Frontend table missing from canonical schema: " + table);
 
+const lookupMapBlock = (app.match(/const lookupMap\\s*=\\s*\\{([\\s\\S]*?)\\};/) || ["",""])[1];
+const lookupTables = new Set([...lookupMapBlock.matchAll(/:\\s*"([A-Za-z][A-Za-z0-9]*)"/g)].map(m => m[1]));
+for (const table of lookupTables) check(schemaTables.has(table), "Lookup references missing canonical table: " + table);
+
+
 const duplicates = [...backend.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1]).filter((n,i,a)=>a.indexOf(n)!==i);
 for (const name of new Set(duplicates)) errors.push("Duplicate backend function declaration: " + name);
 
