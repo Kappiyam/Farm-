@@ -189,8 +189,88 @@ function erpCalculateProductionGap(farmId,startDate,endDate) {
   return {ok:true,rows:rows,methodology:"Confirmed demand and forecast demand are reported separately. Available stock is summed from active produce lots. Projected crop supply uses expected_yield where entered on crop-cycle records; no yield is inferred.",limitations:["Results depend on complete demand, crop-cycle expected-yield and produce-lot records.","Mixed units are not converted automatically; compare only like units."]};
 }
 
+
+/**
+ * Read-only cross-sheet integrity checks for recovering interrupted workflows.
+ * This diagnoses inconsistencies; it does not modify or auto-correct records.
+ */
+function erpGetWorkflowIntegrityReport(farmId) {
+  function inFarm(row){return !farmId||String(row.farm_id)===String(farmId);}
+  function issue(type,id,description,expected,actual){
+    issues.push({entity_type:type,entity_id:id,issue:description,expected:expected,actual:actual});
+  }
+  var issues=[],checks=0,tolerance=0.000001;
+  var procurementLines=erpReadTable_("ProcurementLines").filter(inFarm);
+  var inventory=erpReadTable_("InventoryTransactions").filter(inFarm);
+  var procurementGroups={};
+  procurementLines.forEach(function(line){
+    var key=String(line.procurement_id)+"|"+String(line.item_id);
+    if(!procurementGroups[key])procurementGroups[key]={procurement_id:line.procurement_id,item_id:line.item_id,expected:0};
+    procurementGroups[key].expected+=Number(line.quantity_received)||0;
+  });
+  Object.keys(procurementGroups).forEach(function(key){
+    checks++;
+    var g=procurementGroups[key],actual=inventory.filter(function(tx){
+      return String(tx.reference_type)==="procurement"&&String(tx.reference_id)===String(g.procurement_id)&&String(tx.item_id)===String(g.item_id)&&String(tx.transaction_type)==="receipt";
+    }).reduce(function(sum,tx){return sum+(Number(tx.quantity)||0);},0);
+    if(Math.abs(actual-g.expected)>tolerance)issue("ProcurementOrder",g.procurement_id,"Received line quantities do not match posted inventory receipt transactions.",g.expected,actual);
+  });
+
+  var harvestLines=erpReadTable_("HarvestLines").filter(inFarm),produceLots=erpReadTable_("ProduceLots").filter(inFarm);
+  harvestLines.forEach(function(line){
+    if(["sale","processing"].indexOf(String(line.disposition||"sale"))<0)return;
+    checks++;
+    var count=produceLots.filter(function(lot){return String(lot.harvest_line_id)===String(line.harvest_line_id);}).length;
+    if(count!==1)issue("HarvestLine",line.harvest_line_id,"Sale/processing harvest line must have exactly one produce lot.",1,count);
+  });
+
+  var fulfilmentLines=erpReadTable_("FulfilmentLines"),movements=erpReadTable_("ProduceLotMovements").filter(inFarm);
+  var fulfilGroups={};
+  fulfilmentLines.forEach(function(line){
+    var lot=produceLots.find(function(l){return String(l.produce_lot_id)===String(line.produce_lot_id);});
+    if(farmId&&(!lot||String(lot.farm_id)!==String(farmId)))return;
+    var key=String(line.fulfilment_id)+"|"+String(line.produce_lot_id);
+    fulfilGroups[key]=(fulfilGroups[key]||0)+(Number(line.quantity)||0);
+  });
+  Object.keys(fulfilGroups).forEach(function(key){
+    checks++;
+    var parts=key.split("|"),actual=movements.filter(function(m){
+      return String(m.reference_type)==="fulfilment"&&String(m.reference_id)===parts[0]&&String(m.produce_lot_id)===parts[1]&&String(m.movement_type)==="dispatch";
+    }).reduce(function(sum,m){return sum+(Number(m.quantity)||0);},0);
+    if(Math.abs(actual-fulfilGroups[key])>tolerance)issue("Fulfilment",parts[0],"Fulfilment line quantity does not match its produce-lot dispatch movement.",fulfilGroups[key],actual);
+  });
+
+  produceLots.forEach(function(lot){
+    checks++;
+    var lotMoves=movements.filter(function(m){return String(m.produce_lot_id)===String(lot.produce_lot_id);});
+    var unsupported=lotMoves.some(function(m){return String(m.movement_type)!=="dispatch";});
+    if(unsupported)return;
+    var dispatched=lotMoves.reduce(function(sum,m){return sum+(Number(m.quantity)||0);},0);
+    var expected=(Number(lot.quantity_received)||0)-dispatched,actual=Number(lot.quantity_available)||0;
+    if(Math.abs(expected-actual)>tolerance)issue("ProduceLot",lot.produce_lot_id,"Available lot quantity does not match received quantity less recorded dispatches.",expected,actual);
+  });
+
+  var invoices=erpReadTable_("Invoices").filter(inFarm),invoiceLines=erpReadTable_("InvoiceLines");
+  invoices.forEach(function(invoice){
+    checks++;
+    var lines=invoiceLines.filter(function(line){return String(line.invoice_id)===String(invoice.invoice_id);});
+    var subtotal=lines.reduce(function(sum,line){return sum+(Number(line.line_total)||0);},0);
+    var tax=lines.reduce(function(sum,line){return sum+(Number(line.line_total)||0)*(Number(line.tax_rate)||0)/100;},0);
+    if(Math.abs(subtotal-(Number(invoice.subtotal)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice line subtotal does not match invoice header.",subtotal,Number(invoice.subtotal)||0);
+    if(Math.abs(tax-(Number(invoice.tax_amount)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice line tax does not match invoice header.",tax,Number(invoice.tax_amount)||0);
+    if(Math.abs(subtotal+tax-(Number(invoice.total_amount)||0))>tolerance)issue("Invoice",invoice.invoice_id,"Invoice total does not equal line subtotal plus tax.",subtotal+tax,Number(invoice.total_amount)||0);
+  });
+  return {ok:issues.length===0,readOnly:true,issueCount:issues.length,checkCount:checks,issues:issues,
+    methodology:"Read-only comparisons across procurement receipt transactions, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances and invoice line totals. It reports inconsistencies for review and never changes source records.",
+    limitations:["This report does not repair records.","Produce-lot balance checks assume dispatch is the only movement type; lots with other movement types are excluded from that balance check.","It cannot guarantee that a multi-sheet write was atomic. Review source records before applying any correction."]};
+}
+
 function erpReport(reportKey, filters) {
   filters=filters||{};var start=filters.startDate||"0000-01-01",end=filters.endDate||"9999-12-31",farmId=filters.farmId;
+  if(reportKey==="integrity"){
+    var integrity=erpGetWorkflowIntegrityReport(farmId);
+    return {ok:true,report:"integrity",period:{start:start,end:end},summary:{issues:integrity.issueCount,checks:integrity.checkCount,passed:integrity.issueCount===0},rows:integrity.issues,methodology:integrity.methodology};
+  }
   var map={production:"CropCycles",tasks:"Tasks",workforce:"Attendance",inventory:"StockLots",harvest:"HarvestSessions",sales:"SalesOrders",finance:"FinanceEntries",assets:"Assets","crop-profitability":"CostAllocations"};
   var table=map[reportKey];if(!table)throw new Error("Unsupported report type.");
   var rows=erpReadTable_(table).filter(function(r){
