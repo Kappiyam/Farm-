@@ -196,6 +196,15 @@ context.erpUpdateCalendarEvent("EVT-1","single",calendarInitial[1].occurrence_st
 const calendarAfter=context.erpGetCalendarRange("F-1","2026-11-15","2026-11-18").events;
 assert(calendarAfter.some(x=>x.occurrence_start===calendarInitial[1].occurrence_start&&x.title==="Updated irrigation check"),"Single-occurrence calendar override should be reflected in the range.");
 
+context.erpCreateTaskFromCalendarEvent("EVT-1",calendarInitial[1].occurrence_start,"Calendar follow-up","2026-11-16","calendar-task-once");
+context.erpCreateTaskFromCalendarEvent("EVT-1",calendarInitial[1].occurrence_start,"Calendar follow-up","2026-11-16","calendar-task-once");
+assert(rows("Tasks").filter(x=>x.task_type==="calendar_follow_up").length===1,"Calendar task creation replay must not duplicate tasks.");
+seed("Observations",{observation_id:"OBS-1",farm_id:"F-1",plot_id:"P-1",category:"pest",observed_at:"2026-11-15",severity:"high",description:"Test observation"});
+context.erpCreateTaskFromObservation("OBS-1","Scout pest activity","2026-11-16","high","observation-task-once");
+context.erpCreateTaskFromObservation("OBS-1","Scout pest activity","2026-11-16","high","observation-task-once");
+assert(rows("Tasks").filter(x=>x.task_type==="scouting_follow_up").length===1,"Observation follow-up replay must not duplicate tasks.");
+
+
 const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
 
