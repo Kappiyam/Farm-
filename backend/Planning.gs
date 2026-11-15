@@ -73,12 +73,13 @@ function erpPreviewCropTasks(cropCycleId){
 }
 
 /** Commit an approved preview; unique cycle/template/date keys prevent duplicate tasks. */
-function erpGenerateCropTasks(cropCycleId){
+function erpGenerateCropTasks(cropCycleId,requestKey){
+  if(!requestKey)throw new Error("A stable crop-task generation request key is required.");
   const preview=erpPreviewCropTasks(cropCycleId),created=[],skipped=[];
   preview.tasks.forEach(task=>{
     if(task.already_exists){skipped.push(task);return;}
     delete task.already_exists;delete task.series_occurrence;
-    try{created.push(erpSave("Tasks",task));}
+    try{created.push(erpSave("Tasks",task,requestKey+":"+task.template_id+":"+task.due_at));}
     catch(error){
       if(String(error.message||error).toLowerCase().indexOf("already exists")>=0)skipped.push(task);
       else throw error;
@@ -88,7 +89,8 @@ function erpGenerateCropTasks(cropCycleId){
 }
 
 /** Create a follow-up task only after an explicit user action from a scouting observation. */
-function erpCreateTaskFromObservation(observationId,taskTitle,dueAt,priority){
+function erpCreateTaskFromObservation(observationId,taskTitle,dueAt,priority,requestKey){
+  if(!requestKey)throw new Error("A stable observation follow-up request key is required.");
   if(!taskTitle)throw new Error("Task title is required.");
   const o=erpGetRecord_("Observations",observationId);
   const result=erpSave("Tasks",{
@@ -97,8 +99,8 @@ function erpCreateTaskFromObservation(observationId,taskTitle,dueAt,priority){
       (o.description?" — "+o.description:""),
     task_type:"scouting_follow_up",priority:priority||"normal",status:"ready",
     due_at:dueAt||"",created_by:erpActor_()
-  });
-  erpSave("Observations",{observation_id:observationId,resulting_task_id:result.id});
+  },requestKey);
+  erpSave("Observations",{observation_id:observationId,resulting_task_id:result.id},requestKey+":observation-link");
   return {ok:true,task:result};
 }
 
