@@ -65,7 +65,8 @@ function erpSave(tableName, record, requestKey) {
     var schema=ERP_TABLE_DEFINITIONS[tableName].split("|"), key=ERP_TABLE_KEYS[tableName];
     var clean={};
     Object.keys(record).forEach(function(k){
-      if (schema.indexOf(k)>=0) clean[k]=record[k];
+      if (schema.indexOf(k)<0) throw new Error("Unsupported field '"+k+"' for "+tableName+".");
+      clean[k]=record[k];
     });
     var required=(erpGetSchema().required[tableName]||[]);
     required.forEach(function(k){if(clean[k]===undefined||String(clean[k]).trim()==="")throw new Error(k+" is required.");});
@@ -73,6 +74,7 @@ function erpSave(tableName, record, requestKey) {
     var id=clean[key], rowIndex=-1;
     if (id) {
       for(var i=1;i<values.length;i++) if(String(values[i][headers.indexOf(key)])===String(id)){rowIndex=i+1;break;}
+      if(rowIndex<0) throw new Error("Record not found in "+tableName+"; existing primary keys cannot be supplied for new records.");
     }
     var now=new Date().toISOString();
     if (!id) { id=Utilities.getUuid(); clean[key]=id; }
