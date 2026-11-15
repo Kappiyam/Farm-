@@ -157,6 +157,17 @@ context.erpFinalizeHarvest("H-1",harvestLines,"harvest-once");
 assert(rows("HarvestLines").filter(x=>String(x.harvest_id)==="H-1").length===1,"Harvest replay must not duplicate harvest lines.");
 assert(rows("ProduceLots").filter(x=>String(x.harvest_id)==="H-1").length===1,"Harvest finalisation must create one linked produce lot.");
 
+// Calendar recurrence, single-occurrence cancellation and override must be deterministic.
+seed("CalendarEvents",{event_id:"EVT-1",farm_id:"F-1",title:"Irrigation check",event_type:"irrigation",start_at:"2026-11-15T08:00:00.000Z",recurrence_type:"daily",recurrence_interval:1,recurrence_end:"2026-11-17",occurrence_limit:3,status:"active"});
+const calendarInitial=context.erpGetCalendarRange("F-1","2026-11-15","2026-11-18").events;
+assert(calendarInitial.length===3,"Daily calendar recurrence should produce the expected three occurrences.");
+context.erpCancelCalendarOccurrence("EVT-1",calendarInitial[0].occurrence_start,"Cancelled","calendar-cancel-once");
+context.erpCancelCalendarOccurrence("EVT-1",calendarInitial[0].occurrence_start,"Cancelled","calendar-cancel-once");
+assert(context.erpGetCalendarRange("F-1","2026-11-15","2026-11-18").events.length===2,"Calendar cancellation replay must not create duplicate occurrences.");
+context.erpUpdateCalendarEvent("EVT-1","single",calendarInitial[1].occurrence_start,{title:"Updated irrigation check"},"Single occurrence override","calendar-override-once");
+const calendarAfter=context.erpGetCalendarRange("F-1","2026-11-15","2026-11-18").events;
+assert(calendarAfter.some(x=>x.occurrence_start===calendarInitial[1].occurrence_start&&x.title==="Updated irrigation check"),"Single-occurrence calendar override should be reflected in the range.");
+
 const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
 seed("FulfilmentLines",{fulfilment_id:"FUL-ORPHAN",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:1,unit:"kg"});
