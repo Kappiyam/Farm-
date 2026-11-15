@@ -9,7 +9,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest branch commit: `c76baa1` (task execution contribution validation and regression tests).
+- Latest development commit before this status update: `27ba728` (mutation idempotency contract checks).
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -46,7 +46,8 @@ Last updated: 2026-11-15
 12. Added `docs/SECURITY_MODEL.md` defining the owner-only posture and the required server-side authorization work before worker access.
 16. Prepared `docs/ACCEPTANCE_TEST_PLAN.md` with disposable-spreadsheet scenarios, failure recovery, security checks and evidence requirements.
 8. Contract audit: all 26 frontend API calls resolve and their argument counts fit backend signatures; all 77 UI table references and all 36 lookup-map fields resolve to canonical schema columns, with duplicate keys and stale mappings rejected by CI; 81 canonical tables are defined in schema version `1.0.2`, including the new Attachments metadata table exposed in the Scouting workspace. CI also guards the Apps Script manifest to keep deployment owner-only.
-9. GitHub Actions passed on latest branch commit `c76baa1` (run `43701387546`, 2026-11-15): syntax/contract checks plus mocked Sheets-service workflow tests. This is not a live Apps Script or real Google Sheets integration test.
+9. GitHub Actions passed on development commit `27ba728` (run `43713184704`, 2026-11-15): syntax/contract checks plus mocked Sheets-service workflow tests. The mutation API idempotency contract check also passed on `a5495b2` (run `43713180912`). These are not live Apps Script or real Google Sheets integration tests.
+10. Added `docs/SMALL_PILOT_TEST_PLAN.md` with an isolated owner-only disposable-spreadsheet test sequence, recovery boundaries and evidence checklist.
 
 ## Known limitations and remaining work
 
@@ -55,7 +56,7 @@ Last updated: 2026-11-15
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. A full argument/return-shape and field-level UI/API audit remains incomplete; current contract checks are stronger but not a substitute for full runtime validation.
 5. Mocked tests now cover payment replay/overpayment detection, task assignment/execution membership and contribution limits, calendar recurrence and task replay, stock issue, archive and task-status replay, crop-task generation replay, harvest traceability, missing references and partial-write blocking. These tests do not prove Apps Script runtime or Google Sheets behaviour.
-6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
+6. Run Apps Script integration tests on a disposable spreadsheet using the small pilot plan. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
 9. Prepare and review the source upload/deployment process. Do not run the existing source-upload workflow against this feature branch until its branch protections are deliberately reviewed.
