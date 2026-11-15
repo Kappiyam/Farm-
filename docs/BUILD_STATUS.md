@@ -4,6 +4,9 @@ Last updated: 2026-11-15
 
 ## Working branch
 
+- Current canonical schema version: `1.0.2` (81 tables).
+- Current app version label: `0.4.0` (not yet a release version).
+
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
 - Latest known work package: `e5b6968` (disposable spreadsheet acceptance plan prepared)
