@@ -105,6 +105,8 @@ for (const name of new Set(duplicates)) errors.push("Duplicate backend function 
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "backend", "appsscript.json"), "utf8"));
 check(manifest.webapp && manifest.webapp.executeAs === "USER_DEPLOYING" && manifest.webapp.access === "MYSELF",
   "Deployment must remain owner-only until user identity and farm-level permissions are implemented.");
+check(declared.has("erpInstallSchema") && !declared.has("setupDatabase") && !declared.has("upgradeMultiFarmSchema"),
+  "Current setup must use the canonical additive FarmERP schema migration, not legacy setup routines.");
 
 
 for (const file of ["ErpApi.gs", "ErpWorkflows.gs"]) {
