@@ -290,6 +290,7 @@ function erpIdempotentResult_(key,expectedAction){
   if(!r)return null;
   if(expectedAction&&r.action&&String(r.action)!==String(expectedAction))throw new Error("Request key is already associated with a different workflow action.");
   var status=String(r.status||"").toLowerCase();
+  if(status==="rejected")return null;
   if(status==="in_progress"||status==="failed")throw new Error("A previous attempt for this request key did not complete cleanly. Do not retry blindly; inspect the related records and reconcile the operation first.");
   if(status&&status!=="completed")throw new Error("Unknown idempotency state for this request. Manual reconciliation is required.");
   try{return JSON.parse(r.result_json);}catch(e){return {ok:true,replayed:true};}
