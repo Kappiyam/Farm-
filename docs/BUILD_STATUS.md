@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `3f8deec` (integrity report and partial-failure recovery tests passing)
+- Latest known work package: `87738c6` (additive migration preservation test passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -46,7 +46,7 @@ Last updated: 2026-11-15
 2. Frontend does not yet consistently pass stable idempotency request keys for every critical write. Verify and add request keys at the UI boundary.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. Full argument/return-shape and field-level UI/API audit remains incomplete.
-5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement. Latest GitHub Actions run on `3f8deec` passed both contract and workflow invariant suites.
+5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement and that additive schema migration creates missing tabs/appends missing columns without losing existing row data. Latest GitHub Actions run on `87738c6` passed both contract and workflow invariant suites.
 6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
