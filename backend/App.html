@@ -765,7 +765,8 @@
  }
  async function archiveRecord(id){
   if(!confirm("Archive this record? It will remain available in historical records."))return;
-  try{await call("erpArchive",state.table,id,"Archived from FarmERP");toast("Record archived.");fetchRows();}catch(e){toast(e.message,true);}
+  const archiveRequestKey="archive:"+state.table+":"+id+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
+  try{await call("erpArchive",state.table,id,"Archived from FarmERP",archiveRequestKey);toast("Record archived.");fetchRows();}catch(e){toast(e.message,true);}
  }
  async function exportCsv(){
   try{const csv=await call("erpCsv",state.table);const blob=new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=state.table+".csv";a.click();URL.revokeObjectURL(url);toast("CSV export prepared.");}catch(e){toast(e.message,true);}
