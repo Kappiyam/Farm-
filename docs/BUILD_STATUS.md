@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `5d4e33a` (schema conflict refusal and all mocked workflow tests passing)
+- Latest known work package: `1075f1a` (farm-member checks for task assignment and execution passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
