@@ -122,6 +122,11 @@ function erpRecordTaskExecution(taskId,executions,batchReference){
     if(record.contribution_percent<0||record.contribution_percent>100)
       throw new Error("Contribution must be between 0 and 100 percent.");
     const key="task-execution:"+batchReference+":"+taskId+":"+index+":"+personId;
+    const prior=priorExecutions.find(x=>String(x.idempotency_key||"")===key);
+    if(prior){
+      results.push({executionId:prior.execution_id,duplicate:true,personId:personId});
+      return;
+    }
     const result=erpPostLedger("TaskExecution",record,key);
     results.push({executionId:result.id,duplicate:!!result.duplicate,personId:personId});
   });
