@@ -1,3 +1,21 @@
+function erpAssertPersonFarmMember_(personId,farmId){
+  erpGetRecord_("People",personId);
+  const teams=erpRead_("Teams",{limit:1000,farmId:farmId}).rows;
+  const teamIds=new Set(teams.filter(t=>!["inactive","archived"].includes(String(t.status||"").toLowerCase())).map(t=>String(t.team_id)));
+  const today=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),"yyyy-MM-dd");
+  const memberships=erpRead_("TeamMembers",{limit:1000}).rows.filter(m=>
+    String(m.person_id)===String(personId)&&teamIds.has(String(m.team_id))&&
+    !["inactive","cancelled","removed"].includes(String(m.status||"active").toLowerCase())&&
+    (!m.valid_from||String(m.valid_from).slice(0,10)<=today)&&
+    (!m.valid_to||String(m.valid_to).slice(0,10)>=today));
+  if(!memberships.length)throw new Error("The selected worker is not an active member of a team in this farm.");
+}
+function erpAssertUserFarmMember_(userId,farmId){
+  erpGetRecord_("Users",userId);
+  const memberships=erpRead_("FarmMemberships",{limit:1000,farmId:farmId}).rows.filter(m=>
+    String(m.user_id)===String(userId)&&!["inactive","revoked","cancelled"].includes(String(m.status||"active").toLowerCase()));
+  if(!memberships.length)throw new Error("The selected user does not have an active membership in this farm.");
+}
 /**
  * Workforce/task execution services.
  * Planned tasks, assignments, attendance and measured execution remain distinct.
@@ -14,8 +32,8 @@ function erpAssignTask(taskId,assignments,requestReference){
     const userId=String(assignment.user_id||"").trim();
     const teamName=String(assignment.team_name||"").trim();
     if(!personId&&!userId&&!teamName)throw new Error("Each assignment must identify a person, user or team.");
-    if(personId)erpGetRecord_("People",personId);
-    if(userId)erpGetRecord_("Users",userId);
+    if(personId)erpAssertPersonFarmMember_(personId,task.farm_id);
+    if(userId)erpAssertUserFarmMember_(userId,task.farm_id);
     if(teamName){
       const teams=erpRead_("Teams",{limit:1000,farmId:task.farm_id}).rows;
       if(!teams.some(t=>String(t.team_name).toLowerCase()===teamName.toLowerCase()))
@@ -43,7 +61,7 @@ function erpAssignTask(taskId,assignments,requestReference){
   if(saved.length){
     const taskNow=erpGetRecord_("Tasks",taskId);
     if(["planned","ready"].includes(String(taskNow.status||"").toLowerCase()))
-      erpUpdateTaskStatus(taskId,"assigned","Workers assigned");
+      erpUpdateTaskStatus(taskId,"assigned","Workers assigned",requestReference+":status");
   }
   return {ok:true,taskId:taskId,assignedCount:saved.length,alreadyAssignedCount:skipped.length,
     assignments:saved,skipped:skipped};
@@ -71,11 +89,20 @@ function erpRecordTaskExecution(taskId,executions,batchReference){
   if(!batchReference)throw new Error("A stable execution batch reference is required.");
   if(!Array.isArray(executions)||!executions.length)throw new Error("At least one participant execution line is required.");
   const task=erpGetRecord_("Tasks",taskId);
+  const priorExecutions=erpRead_("TaskExecution",{limit:1000,filter:{task_id:String(taskId)}}).rows;
+  let contributionTotal=priorExecutions.reduce((sum,x)=>sum+(Number(x.contribution_percent)||0),0);
+  executions.forEach((line,index)=>{
+    const personId=String(line.person_id||"").trim();
+    const key="task-execution:"+batchReference+":"+taskId+":"+index+":"+personId;
+    const already=priorExecutions.some(x=>String(x.idempotency_key||"")===key);
+    if(!already)contributionTotal+=Number(line.contribution_percent)||0;
+  });
+  if(contributionTotal>100.000001)throw new Error("Total worker contribution for this task cannot exceed 100 percent.");
   const results=[];
   executions.forEach((line,index)=>{
     const personId=String(line.person_id||"").trim();
     if(!personId)throw new Error("Each execution line must identify the participating worker.");
-    erpGetRecord_("People",personId);
+    erpAssertPersonFarmMember_(personId,task.farm_id);
     const started=line.started_at||new Date();
     const duration=Number(line.duration_minutes)||0;
     const quantity=line.quantity===""||line.quantity===null||line.quantity===undefined?"":Number(line.quantity);
@@ -99,9 +126,9 @@ function erpRecordTaskExecution(taskId,executions,batchReference){
     results.push({executionId:result.id,duplicate:!!result.duplicate,personId:personId});
   });
   const currentStatus=String(task.status||"planned").toLowerCase();
-  if(currentStatus==="planned")erpUpdateTaskStatus(taskId,"ready","Actual work started");
+  if(currentStatus==="planned")erpUpdateTaskStatus(taskId,"ready","Actual work started",batchReference+":status-ready");
   if(["planned","ready","assigned","blocked"].includes(currentStatus))
-    erpUpdateTaskStatus(taskId,"in_progress","Actual work recorded");
+    erpUpdateTaskStatus(taskId,"in_progress","Actual work recorded",batchReference+":status-progress");
   return {ok:true,taskId:taskId,recordedCount:results.length,results:results,
     note:"Execution records are measured actuals. Task completion status remains a separate review decision."};
 }
