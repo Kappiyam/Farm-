@@ -683,7 +683,31 @@ function erpUpdateTaskStatus(taskId,nextStatus,reason,requestKey){
     const ids=sh.getRange(2,idCol,Math.max(0,sh.getLastRow()-1),1).getDisplayValues().flat();
     const index=ids.indexOf(String(taskId));if(index<0)throw new Error("Task not found.");
     const row=index+2,old=String(sh.getRange(row,statusCol).getDisplayValue()||"planned").toLowerCase();
-    if(old===next)return {ok:true,changed:false,status:next};
+    const idem=ss.getSheetByName("IdempotencyKeys");
+    if(!idem)throw new Error("Idempotency schema is not installed.");
+    const ih=idem.getRange(1,1,1,idem.getLastColumn()).getDisplayValues()[0];
+    const keyCol=ih.indexOf("idempotency_key")+1,statusKeyCol=ih.indexOf("status")+1,
+      operationCol=ih.indexOf("operation_type")+1,resultCol=ih.indexOf("result_id")+1,hashCol=ih.indexOf("payload_hash")+1;
+    if(!keyCol||!statusKeyCol||!operationCol||!resultCol||!hashCol)throw new Error("Task status idempotency columns are unavailable.");
+    const payloadHash=Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+      JSON.stringify({taskId:String(taskId),nextStatus:next,reason:String(reason||"")}),Utilities.Charset.UTF_8));
+    const keys=idem.getLastRow()>=2?idem.getRange(2,keyCol,idem.getLastRow()-1,1).getDisplayValues().flat():[];
+    let markerRow=keys.indexOf(String(requestKey));
+    if(markerRow>=0){
+      markerRow+=2;
+      if(String(idem.getRange(markerRow,operationCol).getDisplayValue())!=="TaskStatus"||
+        String(idem.getRange(markerRow,hashCol).getDisplayValue())!==payloadHash)
+        throw new Error("Task status request key was already used for another operation.");
+      if(String(idem.getRange(markerRow,statusKeyCol).getDisplayValue())==="complete")
+        return {ok:true,changed:false,duplicate:true,status:next};
+      throw new Error("The earlier task status change did not complete. Review task history before retrying.");
+    }
+    if(old===next){
+      const marker={idempotency_key:requestKey,operation_type:"TaskStatus",result_id:taskId,status:"complete",
+        payload_hash:payloadHash,created_at:new Date(),updated_at:new Date()};
+      idem.appendRow(ih.map(h=>Object.prototype.hasOwnProperty.call(marker,h)?marker[h]:""));
+      return {ok:true,changed:false,status:next};
+    }
     if(!(ERP_TASK_TRANSITIONS[old]||[]).includes(next))
       throw new Error("Task status transition "+old+" → "+next+" is not permitted.");
     if(["blocked","deferred","cancelled"].includes(next)&&!String(reason||"").trim())
@@ -698,6 +722,10 @@ function erpUpdateTaskStatus(taskId,nextStatus,reason,requestKey){
       const execution=erpRead_("TaskExecution",{limit:1000,filter:{task_id:String(taskId)}}).rows;
       if(!execution.length)throw new Error("Record actual task execution before marking the task "+next.replace(/_/g," ")+".");
     }
+    const marker={idempotency_key:requestKey,operation_type:"TaskStatus",result_id:taskId,status:"processing",
+      payload_hash:payloadHash,created_at:new Date(),updated_at:new Date()};
+    idem.appendRow(ih.map(h=>Object.prototype.hasOwnProperty.call(marker,h)?marker[h]:""));
+    markerRow=idem.getLastRow();
     sh.getRange(row,statusCol).setValue(next);if(updatedCol)sh.getRange(row,updatedCol).setValue(new Date());
     const history=ss.getSheetByName("TaskStatusHistory");
     const hh=history.getRange(1,1,1,history.getLastColumn()).getDisplayValues()[0];
@@ -705,6 +733,8 @@ function erpUpdateTaskStatus(taskId,nextStatus,reason,requestKey){
       changed_at:new Date(),changed_by:erpActor_(),reason:reason||""};
     history.appendRow(hh.map(h=>Object.prototype.hasOwnProperty.call(item,h)?item[h]:""));
     erpAudit_("Tasks",taskId,"status_transition",{status:old},{status:next,reason:reason||""});
+    idem.getRange(markerRow,statusKeyCol).setValue("complete");
+    const updatedMarkerCol=ih.indexOf("updated_at")+1;if(updatedMarkerCol)idem.getRange(markerRow,updatedMarkerCol).setValue(new Date());
     return {ok:true,changed:true,oldStatus:old,status:next};
   });
 }
