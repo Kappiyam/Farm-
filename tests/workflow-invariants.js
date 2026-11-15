@@ -157,17 +157,6 @@ context.erpFinalizeHarvest("H-1",harvestLines,"harvest-once");
 assert(rows("HarvestLines").filter(x=>String(x.harvest_id)==="H-1").length===1,"Harvest replay must not duplicate harvest lines.");
 assert(rows("ProduceLots").filter(x=>String(x.harvest_id)==="H-1").length===1,"Harvest finalisation must create one linked produce lot.");
 
-// Assignment and execution records must also replay without duplication.
-seed("People",{person_id:"P-1",display_name:"Test worker",status:"active"});
-seed("Teams",{team_id:"TEAM-1",farm_id:"F-1",team_name:"Field crew",status:"active"});
-context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
-context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
-assert(rows("TaskAssignments").filter(x=>String(x.task_id)==="T-1").length===2,"Assignment replay must not duplicate person/team assignments.");
-const execution=[{person_id:"P-1",quantity:2,quantity_unit:"hours",duration_minutes:120,notes:"Test execution"}];
-context.erpRecordTaskExecution("T-1",execution,"execution-once");
-context.erpRecordTaskExecution("T-1",execution,"execution-once");
-assert(rows("TaskExecution").filter(x=>String(x.task_id)==="T-1").length===1,"Execution replay must not duplicate task actuals.");
-
 const cleanIntegrity=context.erpGetWorkflowIntegrityReport("F-1");
 assert(cleanIntegrity.issueCount===0,"Valid completed workflow records should pass the integrity report.");
 seed("FulfilmentLines",{fulfilment_id:"FUL-ORPHAN",sales_order_id:"SO-1",sales_line_id:"SOL-1",produce_lot_id:"PL-1",quantity:1,unit:"kg"});
@@ -183,6 +172,17 @@ assert(rows("Tasks")[0].status==="assigned","Valid task transition should persis
 const historyCount=rows("TaskStatusHistory").length;
 context.erpUpdateTaskStatus("T-1","assigned","duplicate retry");
 assert(rows("TaskStatusHistory").length===historyCount,"Repeated identical task status must not append duplicate history.");
+
+// Assignment and execution records must also replay without duplication.
+seed("People",{person_id:"P-1",display_name:"Test worker",status:"active"});
+seed("Teams",{team_id:"TEAM-1",farm_id:"F-1",team_name:"Field crew",status:"active"});
+context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
+context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
+assert(rows("TaskAssignments").filter(x=>String(x.task_id)==="T-1").length===2,"Assignment replay must not duplicate person/team assignments.");
+const execution=[{person_id:"P-1",quantity:2,quantity_unit:"hours",duration_minutes:120,notes:"Test execution"}];
+context.erpRecordTaskExecution("T-1",execution,"execution-once");
+context.erpRecordTaskExecution("T-1",execution,"execution-once");
+assert(rows("TaskExecution").filter(x=>String(x.task_id)==="T-1").length===1,"Execution replay must not duplicate task actuals.");
 
 
 // Crop task generation must remain duplicate-safe when the same cycle is generated twice.
