@@ -77,6 +77,11 @@ function rows(table){return context.erpReadTable_(table);}
 function assert(ok,message){if(!ok)throw new Error(message);}
 function throws(fn,message){let did=false;try{fn();}catch(e){did=true;}assert(did,message);}
 
+// Workflow-managed ledgers must not be writable through the generic ledger endpoint.
+throws(()=>context.erpPostLedger("Payments",{farm_id:"F-1",amount:1}),"Payments must use the invoice payment workflow.");
+throws(()=>context.erpPostLedger("InventoryTransactions",{farm_id:"F-1",quantity:1}),"Inventory transactions must use a stock workflow.");
+throws(()=>context.erpPostLedger("TaskExecution",{farm_id:"F-1",quantity:1}),"Task execution must use the task execution workflow.");
+
 // Generic saves must not silently discard fields or create records with caller-supplied unknown keys.
 throws(()=>context.erpSave("Sites",{farm_id:"F-1",site_name:"Test site",unexpected_field:"bad"}),"Unknown save fields must be rejected.");
 throws(()=>context.erpSave("Sites",{site_id:"NONEXISTENT",farm_id:"F-1",site_name:"Test site"}),"Unknown supplied primary keys must not create records.");
