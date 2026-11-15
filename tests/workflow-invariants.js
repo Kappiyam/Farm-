@@ -193,6 +193,8 @@ throws(()=>context.erpAssignTask("T-1",[{person_id:"P-2"}],"assign-nonmember"),"
 context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
 context.erpAssignTask("T-1",[{person_id:"P-1"},{team_name:"Field crew"}],"assign-once");
 assert(rows("TaskAssignments").filter(x=>String(x.task_id)==="T-1").length===2,"Assignment replay must not duplicate person/team assignments.");
+throws(()=>context.erpRecordTaskExecution("T-1",[{person_id:"P-2",quantity:1}],"execution-nonmember"),"Workers outside the farm must not record task actuals.");
+assert(rows("TaskExecution").filter(x=>String(x.task_id)==="T-1").length===0,"Rejected worker execution must not be recorded.");
 const execution=[{person_id:"P-1",quantity:2,quantity_unit:"hours",duration_minutes:120,notes:"Test execution"}];
 context.erpRecordTaskExecution("T-1",execution,"execution-once");
 context.erpRecordTaskExecution("T-1",execution,"execution-once");
