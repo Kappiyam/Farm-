@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `87738c6` (additive migration preservation test passing)
+- Latest known work package: `625b5d2` (workflow bypass prevention and finance ledger validation passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -33,7 +33,7 @@ Last updated: 2026-11-15
 15. Added a read-only workflow integrity report to Reports & Analytics. It checks procurement receipt postings, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances and invoice totals; it reports exceptions without auto-correcting data.
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation, including no-op handling for repeated identical status updates.
-10. Generic saves reject unknown fields and unknown caller-supplied primary keys; customer payments validate date, method, invoice state and farm payment-account scope.
+10. Generic saves reject unknown fields and unknown caller-supplied primary keys; customer payments validate date, method, invoice state and farm payment-account scope. Direct posting is blocked for Payments, InventoryTransactions and TaskExecution; remaining FinanceEntries/WageTransactions/Attendance postings have required-field and positive-amount checks.
 11. Added an Attachments metadata table and Scouting workspace entry. Binary upload/storage integration is not yet implemented.
 13. Renamed legacy database setup routines as private reference functions; the current setup path is the canonical additive `erpPreviewSchemaMigration()` / `erpInstallSchema()` flow. CI guards against re-exposing the legacy setup functions.
 12. Added `docs/SECURITY_MODEL.md` defining the owner-only posture and the required server-side authorization work before worker access.
@@ -46,7 +46,7 @@ Last updated: 2026-11-15
 2. Frontend does not yet consistently pass stable idempotency request keys for every critical write. Verify and add request keys at the UI boundary.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. Full argument/return-shape and field-level UI/API audit remains incomplete.
-5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement and that additive schema migration creates missing tabs/appends missing columns without losing existing row data. Latest GitHub Actions run on `87738c6` passed both contract and workflow invariant suites.
+5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement and that additive schema migration creates missing tabs/appends missing columns without losing existing row data. Latest GitHub Actions run on `625b5d2` passed both contract and workflow invariant suites.
 6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
