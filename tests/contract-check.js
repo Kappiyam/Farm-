@@ -82,6 +82,24 @@ for (const site of callSites(app)) {
     "Frontend passes " + site.args + " arguments to " + site.name + " but backend declares " + parameterCounts[site.name] + ".");
 }
 
+// Every frontend mutation endpoint must supply its request idempotency key.
+const mutationArgumentCounts = {
+  erpSave:3, erpArchive:4, erpPostLedger:3, erpIssueInventoryLot:6,
+  erpReceiveProcurement:3, erpFinalizeHarvest:3, erpFulfilSalesOrder:5,
+  erpCreateInvoiceFromOrder:3, erpRecordCustomerPayment:3, erpAssignTask:3,
+  erpRecordTaskExecution:3, erpUpdateTaskStatus:4, erpGenerateCropTasks:2,
+  erpCreateTaskFromObservation:5, erpCreateTaskFromCalendarEvent:5,
+  erpCancelCalendarOccurrence:4, erpUpdateCalendarEvent:6
+};
+for (const [name, expected] of Object.entries(mutationArgumentCounts)) {
+  const sites = callSites(app).filter(site => site.name === name);
+  check(sites.length > 0, "Expected frontend mutation call is missing: " + name);
+  for (const site of sites) check(site.args === expected,
+    name + " must pass " + expected + " arguments including its request key; found " + site.args + ".");
+  check(parameterCounts[name] === expected,
+    name + " backend signature must accept the request key as its final argument.");
+}
+
 
 const schemaBlock = (sources["ErpSchema.gs"].match(/const ERP_TABLE_DEFINITIONS[\s\S]*?\n\}\);/) || [""])[0];
 const schemaTables = new Set([...schemaBlock.matchAll(/^\s{2}([A-Za-z][A-Za-z0-9]*):/gm)].map(m => m[1]));
