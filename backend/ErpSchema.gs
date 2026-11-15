@@ -9,6 +9,9 @@ const ERP_SCHEMA_VERSION = "1.0.0";
 
 const ERP_TABLE_DEFINITIONS = Object.freeze({
   Organizations: "organization_id|organization_name|organization_code|country_code|status|created_at|updated_at",
+  Users: "user_id|display_name|email|phone|preferred_language|status|created_at|updated_at",
+  Roles: "role_id|role_name|description|permissions_json|is_system_role|status|created_at|updated_at",
+  UserRoles: "user_role_id|user_id|role_id|scope_type|scope_id|created_at",
   OrganizationUsers: "organization_user_id|organization_id|user_id|membership_role|status|created_at|updated_at",
   FarmMemberships: "farm_membership_id|farm_id|user_id|role_id|status|created_at|updated_at",
   FarmSettings: "farm_setting_id|farm_id|setting_key|setting_value|updated_at",
