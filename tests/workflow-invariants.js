@@ -217,6 +217,13 @@ assert(ss.getSheetByName("Attachments")!==null,"Additive migration must create a
 assert(ss.getSheetByName("Sites").getDataRange().getValues()[1][0]==="SITE-OLD","Additive migration must preserve existing site records.");
 const afterMigration=context.erpPreviewSchemaMigration();
 assert(afterMigration.createTabs.length===0&&afterMigration.appendColumns.length===0,"Second migration preview should be clean after additive installation.");
+const brokenSites=new FakeSheet("Sites",["legacy_site_key"].concat(siteHeaders.slice(1)));
+brokenSites.appendRow(["OLD-KEY"]);
+ss.sheets.Sites=brokenSites;
+const mismatchPreview=context.erpPreviewSchemaMigration();
+assert(!mismatchPreview.ok&&mismatchPreview.mismatches.some(x=>x.table==="Sites"),"Migration preview must detect primary-key conflicts.");
+throws(()=>context.erpInstallSchema(),"Schema migration must refuse a primary-key mismatch.");
+
 
 console.log("WORKFLOW INVARIANT TESTS PASSED");
 console.log("Checked cumulative procurement, same-lot fulfilment, idempotent replay, invoice/payment replay and task transitions.");
