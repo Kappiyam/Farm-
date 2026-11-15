@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `fdc1c8f` (security and worker-access release constraints documented)
+- Latest known work package: `11003e1` (write-ahead idempotency and failed-retry safeguards under test)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -29,6 +29,7 @@ Last updated: 2026-11-15
 3. Procurement receipt, harvest finalisation, produce-lot fulfilment, invoicing, customer payment, production-gap, reporting and calendar services.
 4. GitHub Actions syntax and contract workflow.
 5. Shared ScriptLock wrapper for critical multi-sheet workflows: procurement, harvest, fulfilment, invoicing, customer payments, task assignment/execution/status, ledger posting, archive, crop-task generation and calendar mutations.
+14. Extended idempotency records with in-progress/completed/failed states. Critical workflows now write a start marker before mutation, mark success after completion, and block blind retries after a failure or interrupted execution. Request keys are bound to the workflow action.
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation, including no-op handling for repeated identical status updates.
 10. Generic saves reject unknown fields and unknown caller-supplied primary keys; customer payments validate date, method, invoice state and farm payment-account scope.
@@ -40,7 +41,7 @@ Last updated: 2026-11-15
 
 ## Known limitations and remaining work
 
-1. Google Sheets does not provide multi-sheet atomic transactions. ScriptLock serialises concurrent execution and idempotency keys prevent replay when supplied, but a service interruption after the first write can still leave a partial transaction. A reconciliation/compensation strategy and failure-injection tests are still required.
+1. Google Sheets does not provide multi-sheet atomic transactions. ScriptLock serialises concurrent execution. Write-ahead idempotency markers prevent blind replay after an interrupted or failed request, but a service interruption after the first write can still leave partial records that require manual reconciliation. Automated reconciliation/compensation is still required.
 2. Frontend does not yet consistently pass stable idempotency request keys for every critical write. Verify and add request keys at the UI boundary.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. Full argument/return-shape and field-level UI/API audit remains incomplete.
