@@ -97,6 +97,13 @@ const fieldTableBlock = (app.match(/const fieldTables\s*=\s*new Set\(\[([\s\S]*?
 const fieldTables = new Set([...fieldTableBlock.matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map(m => m[1]));
 for (const table of fieldTables) check(schemaTables.has(table), "Field editor references missing canonical table: " + table);
 
+const schemaFields = new Set([...schemaBlock.matchAll(/"([^"]+)"/g)].flatMap(m => m[1].split("|")));
+const lookupPairs = [...lookupMapBlock.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*"([A-Za-z][A-Za-z0-9]*)"/g)].map(m => ({field:m[1],table:m[2]}));
+for (const pair of lookupPairs) check(schemaFields.has(pair.field), "Lookup map field is absent from canonical schema: " + pair.field);
+const lookupKeys = lookupPairs.map(x=>x.field);
+for (const key of new Set(lookupKeys.filter((x,i)=>lookupKeys.indexOf(x)!==i))) errors.push("Duplicate lookup map key: " + key);
+
+
 
 
 const duplicates = [...backend.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1]).filter((n,i,a)=>a.indexOf(n)!==i);
