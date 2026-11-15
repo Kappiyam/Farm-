@@ -165,18 +165,33 @@ function erpUpdateTaskStatusUnlocked_(taskId,status,reason) {
   return {ok:true,status:status,task:result};
 }
 
+function erpAssertPersonFarmMember_(personId,farmId) {
+  var person=erpFindByKey_("People","person_id",personId);
+  if(!person||!erpActive_(person.status))throw new Error("Worker is missing or inactive.");
+  var member=erpReadTable_("TeamMembers").some(function(m){
+    return String(m.person_id)===String(personId)&&String(m.farm_id)===String(farmId)&&erpActive_(m.status);
+  });
+  if(!member&&person.team_id){
+    var team=erpFindByKey_("Teams","team_id",person.team_id);
+    member=!!team&&String(team.farm_id)===String(farmId)&&erpActive_(team.status);
+  }
+  if(!member)throw new Error("Worker is not an active member of this farm.");
+  return person;
+}
+
 function erpAssignTaskUnlocked_(taskId, assignments, requestKey) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
   var created=[],already=0;
   (assignments||[]).forEach(function(item){
     item=item||{};
     if(item.person_id){
+      erpAssertPersonFarmMember_(item.person_id,task.farm_id);
       var exists=erpReadTable_("TaskAssignments").some(function(a){return String(a.task_id)===String(taskId)&&String(a.person_id)===String(item.person_id)&&erpActive_(a.status);});
       if(exists){already++;return;}
       created.push(erpAppend_("TaskAssignments",{farm_id:task.farm_id,task_id:taskId,person_id:item.person_id,assignment_role:item.assignment_role||"assignee",assigned_by:erpActor_(),assigned_at:new Date().toISOString(),status:"active"}));
     } else if(item.team_name) {
-      var teams=erpReadTable_("Teams"),team=teams.find(function(t){return String(t.team_name)===String(item.team_name)&&String(t.farm_id)===String(task.farm_id);});
-      if(!team)throw new Error("Team not found: "+item.team_name);
+      var teams=erpReadTable_("Teams"),team=teams.find(function(t){return String(t.team_name)===String(item.team_name)&&String(t.farm_id)===String(task.farm_id)&&erpActive_(t.status);});
+      if(!team)throw new Error("Active team not found for this farm: "+item.team_name);
       var existsTeam=erpReadTable_("TaskAssignments").some(function(a){return String(a.task_id)===String(taskId)&&String(a.team_id)===String(team.team_id)&&erpActive_(a.status);});
       if(existsTeam){already++;return;}
       created.push(erpAppend_("TaskAssignments",{farm_id:task.farm_id,task_id:taskId,team_id:team.team_id,assignment_role:item.assignment_role||"assignee",assigned_by:erpActor_(),assigned_at:new Date().toISOString(),status:"active"}));
@@ -189,7 +204,14 @@ function erpAssignTaskUnlocked_(taskId, assignments, requestKey) {
 
 function erpRecordTaskExecutionUnlocked_(taskId, entries, requestKey) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
+  if(!entries||!entries.length)throw new Error("At least one execution entry is required.");
   var created=(entries||[]).map(function(e){
+    e=e||{};
+    if(!e.person_id)throw new Error("Each execution entry must identify the worker.");
+    erpAssertPersonFarmMember_(e.person_id,task.farm_id);
+    if(e.quantity!==undefined&&e.quantity!==""&&(!isFinite(Number(e.quantity))||Number(e.quantity)<0))throw new Error("Execution quantity cannot be negative.");
+    if(e.duration_minutes!==undefined&&e.duration_minutes!==""&&(!isFinite(Number(e.duration_minutes))||Number(e.duration_minutes)<0))throw new Error("Execution duration cannot be negative.");
+    if(e.contribution_percent!==undefined&&e.contribution_percent!==""&&(!isFinite(Number(e.contribution_percent))||Number(e.contribution_percent)<0||Number(e.contribution_percent)>100))throw new Error("Contribution must be between 0 and 100 percent.");
     return erpAppend_("TaskExecution",Object.assign({},e,{farm_id:task.farm_id,task_id:taskId,executed_at:e.executed_at||e.started_at||new Date().toISOString(),recorded_by:erpActor_()}));
   });
   if(created.length&&task.status!=="completed")erpUpdateByKey_("Tasks","task_id",taskId,{status:"in_progress",updated_at:new Date().toISOString()});
