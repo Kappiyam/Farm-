@@ -291,12 +291,22 @@ function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt) {
 function erpRunLockedWorkflow_(action,requestKey,work) {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
+  var marker=null;
   try {
     var prior=requestKey&&erpIdempotentResult_(requestKey);
     if(prior)return prior;
-    var result=work();
-    if(requestKey)erpStoreIdempotency_(requestKey,action,result);
-    return result;
+    if(requestKey)marker=erpAppend_("IdempotencyKeys",{request_key:requestKey,action:action,status:"in_progress",started_at:new Date().toISOString(),created_at:new Date().toISOString()});
+    try {
+      var result=work();
+      if(requestKey)erpStoreIdempotency_(requestKey,action,result);
+      return result;
+    } catch(error) {
+      if(marker) {
+        try { erpUpdateByKey_("IdempotencyKeys","idempotency_id",marker.idempotency_id,{status:"failed",error_message:String(error&&error.message||error)}); }
+        catch(markError) { console.error("Unable to mark workflow request failed: "+markError.message); }
+      }
+      throw error;
+    }
   } finally {
     lock.releaseLock();
   }
