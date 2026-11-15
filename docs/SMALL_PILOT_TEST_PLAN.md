@@ -12,8 +12,8 @@ This is a controlled acceptance test of the feature branch against a disposable 
 
 ## Prepare the isolated test environment
 
-1. In Google Drive, create a copy of the current database spreadsheet and name it FarmERP - DISPOSABLE TEST - YYYYMMDD.
-2. Confirm the copy has a separate spreadsheet ID. Open it and verify it contains no live operational records. If the copy contains real records, stop and create a new blank spreadsheet instead.
+1. In Google Drive, create a new, blank Google Spreadsheet and name it FarmERP - DISPOSABLE TEST - YYYYMMDD. Do not copy the live farm database or its records.
+2. Record the new spreadsheet ID. Confirm it contains no operational data before continuing.
 3. Create/use a separate Apps Script project bound to this disposable spreadsheet. Do not change the live Apps Script project.
 4. Bring in the reviewed source from branch feature/farmerp-complete-build. Confirm the manifest still has executeAs: USER_DEPLOYING and access: MYSELF.
 5. Before installing schema, use File → Make a copy again to create a clean pre-migration backup. Record both spreadsheet IDs in the test log.
