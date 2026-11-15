@@ -65,7 +65,7 @@ const context={
       const hh=String(d.getUTCHours()).padStart(2,"0"),mi=String(d.getUTCMinutes()).padStart(2,"0"),ss=String(d.getUTCSeconds()).padStart(2,"0");
       return String(format||"yyyy-MM-dd").replace("yyyy",String(yyyy)).replace("MM",mm).replace("dd",dd).replace("HH",hh).replace("mm",mi).replace("ss",ss);
     },
-    parseDate:(value,tz,format)=>new Date(value)
+    parseDate:(value,tz,format)=>new Date(String(value).replace(/\'T\'/g,"T"))
   },
   CacheService:{getScriptCache:()=>({remove:()=>{},get:()=>null,put:()=>{}})},
   PropertiesService:{
