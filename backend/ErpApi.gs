@@ -205,6 +205,8 @@ function erpAssignTaskUnlocked_(taskId, assignments, requestKey) {
 function erpRecordTaskExecutionUnlocked_(taskId, entries, requestKey) {
   var task=erpFindByKey_("Tasks","task_id",taskId);if(!task)throw new Error("Task not found.");
   if(!entries||!entries.length)throw new Error("At least one execution entry is required.");
+  var contributionTotal=(entries||[]).reduce(function(sum,e){return sum+(e&&e.contribution_percent!==undefined&&e.contribution_percent!==""?Number(e.contribution_percent)||0:0);},0);
+  if(contributionTotal>100.000001)throw new Error("Total worker contribution cannot exceed 100 percent.");
   var created=(entries||[]).map(function(e){
     e=e||{};
     if(!e.person_id)throw new Error("Each execution entry must identify the worker.");
