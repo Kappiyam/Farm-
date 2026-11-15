@@ -368,6 +368,9 @@ function erpCreateTaskFromCalendarEvent(eventId,occurrenceStart,title,dueAt) {
  * Apps Script Sheets writes are not atomic; this lock prevents concurrent
  * interleaving but does not roll back a partial write after a service failure.
  */
+var ERP_WORKFLOW_TRACKING=false;
+var ERP_WORKFLOW_WRITE_COUNT=0;
+
 function erpRunLockedWorkflow_(action,requestKey,work) {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
@@ -375,17 +378,36 @@ function erpRunLockedWorkflow_(action,requestKey,work) {
   try {
     var prior=requestKey&&erpIdempotentResult_(requestKey,action);
     if(prior)return prior;
-    if(requestKey)marker=erpAppend_("IdempotencyKeys",{request_key:requestKey,action:action,status:"in_progress",started_at:new Date().toISOString(),created_at:new Date().toISOString()});
+    if(requestKey){
+      var existing=erpFindByKey_("IdempotencyKeys","request_key",requestKey);
+      var now=new Date().toISOString();
+      if(existing&&String(existing.status)==="rejected"){
+        marker=erpUpdateByKey_("IdempotencyKeys","idempotency_id",existing.idempotency_id,{status:"in_progress",started_at:now,completed_at:"",error_message:""});
+      }else if(!existing){
+        marker=erpAppend_("IdempotencyKeys",{request_key:requestKey,action:action,status:"in_progress",started_at:now,created_at:now});
+      }else{
+        throw new Error("Request key already exists in a non-retryable state.");
+      }
+    }
+    ERP_WORKFLOW_WRITE_COUNT=0;
+    ERP_WORKFLOW_TRACKING=true;
     try {
       var result=work();
       if(requestKey)erpStoreIdempotency_(requestKey,action,result);
       return result;
     } catch(error) {
+      var partialWrite=ERP_WORKFLOW_WRITE_COUNT>0;
+      ERP_WORKFLOW_TRACKING=false;
       if(marker) {
-        try { erpUpdateByKey_("IdempotencyKeys","idempotency_id",marker.idempotency_id,{status:"failed",error_message:String(error&&error.message||error)}); }
-        catch(markError) { console.error("Unable to mark workflow request failed: "+markError.message); }
+        try { erpUpdateByKey_("IdempotencyKeys","idempotency_id",marker.idempotency_id,{
+          status:partialWrite?"failed":"rejected",
+          error_message:String(error&&error.message||error)
+        }); }
+        catch(markError) { console.error("Unable to mark workflow request outcome: "+markError.message); }
       }
       throw error;
+    } finally {
+      ERP_WORKFLOW_TRACKING=false;
     }
   } finally {
     lock.releaseLock();
