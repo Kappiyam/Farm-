@@ -5,7 +5,7 @@
  * Run erpInstallSchema() only after reviewing the migration preview.
  * This file intentionally does not create organisation or farm business records.
  */
-const ERP_SCHEMA_VERSION = "1.0.0";
+const ERP_SCHEMA_VERSION = "1.0.1";
 
 const ERP_TABLE_DEFINITIONS = Object.freeze({
   Organizations: "organization_id|organization_name|organization_code|country_code|status|created_at|updated_at",
@@ -84,6 +84,7 @@ const ERP_TABLE_DEFINITIONS = Object.freeze({
   EventParticipants: "event_participant_id|event_id|person_id|team_id|participation_role|status|created_at",
   Notifications: "notification_id|farm_id|user_id|notification_type|title|message|read_at|created_at",
   SavedViews: "saved_view_id|user_id|farm_id|view_name|module_key|view_config|is_default|created_at|updated_at",
+  Attachments: "attachment_id|farm_id|entity_type|entity_id|file_id|file_name|mime_type|size_bytes|storage_provider|uploaded_by|uploaded_at|caption|status|created_at",
   AuditLog: "audit_id|organization_id|farm_id|entity_type|entity_id|action|actor_user_id|occurred_at|change_summary",
   IdempotencyKeys: "idempotency_id|farm_id|request_key|action|result_json|created_at",
   AppConfig: "config_key|config_value|updated_at",
@@ -100,7 +101,7 @@ const ERP_ARCHIVABLE_TABLES = Object.freeze([
   "People","Teams","Suppliers","Customers","Units","InventoryItems","Products",
   "DemandRecords","ForecastVersions","PlantingCampaigns","PlantingPlans","CropCycles",
   "TaskTemplates","Tasks","Observations","ActivityJournal","Assets","Maintenance",
-  "CalendarEvents","Notifications","SavedViews"
+  "CalendarEvents","Notifications","SavedViews","Attachments"
 ]);
 
 function erpGetSchema() {
