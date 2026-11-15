@@ -451,7 +451,7 @@ function erpSave(table,record,idempotencyKey){
   });
 }
 
-function erpArchive(table,id,reason){
+function erpArchive(table,id,reason,requestKey){
   if(!ERP_ARCHIVABLE.has(table))throw new Error("This record type must be corrected or cancelled through its own workflow, not archived.");
   const data=erpList(table,{limit:1000,filter:{[ERP_KEYS[table]]:id}});
   if(!data.rows.length)throw new Error("Record not found.");
@@ -459,7 +459,7 @@ function erpArchive(table,id,reason){
   if(!("status" in record))throw new Error("This record type cannot be archived.");
   record.status="inactive";
   if("notes" in record)record.notes=[record.notes,reason||"Archived by user"].filter(Boolean).join(" | ");
-  return erpSave(table,record);
+  return erpSave(table,record,requestKey);
 }
 
 function erpObject_(headers,values){const o={};headers.forEach((h,i)=>o[h]=erpValue_(values[i]));return o;}
@@ -633,7 +633,8 @@ const ERP_TASK_TRANSITIONS = Object.freeze({
   cancelled:[]
 });
 
-function erpUpdateTaskStatus(taskId,nextStatus,reason){
+function erpUpdateTaskStatus(taskId,nextStatus,reason,requestKey){
+  if(!requestKey)throw new Error("A stable task-status request key is required.");
   const next=String(nextStatus||"").toLowerCase();
   if(!Object.prototype.hasOwnProperty.call(ERP_TASK_TRANSITIONS,next))throw new Error("Unknown task status.");
   return erpWithLock_(()=>{
