@@ -131,7 +131,9 @@ const workflowLocks = [
   ["ErpApi.gs","erpAssignTask"],
   ["ErpApi.gs","erpRecordTaskExecution"],
   ["ErpApi.gs","erpPostLedger"],
+  ["ErpApi.gs","erpCreateTaskFromObservation"],
   ["ErpApi.gs","erpGenerateCropTasks"],
+  ["ErpWorkflows.gs","erpCreateTaskFromCalendarEvent"],
   ["ErpWorkflows.gs","erpCancelCalendarOccurrence"],
   ["ErpWorkflows.gs","erpUpdateCalendarEvent"]
 ];
