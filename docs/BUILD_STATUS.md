@@ -6,7 +6,7 @@ Last updated: 2026-11-15
 
 - Branch: `feature/farmerp-complete-build`
 - Base: `foundation/bootstrap`
-- Latest known work package: `625b5d2` (workflow bypass prevention and finance ledger validation passing)
+- Latest known work package: `6e7fd05` (safe validation retries and partial-write protection passing)
 - The base branch is preserved. Do not upload this feature branch to the live Apps Script project before integration review and explicit deployment approval.
 
 ## Confirmed requirements
@@ -29,7 +29,7 @@ Last updated: 2026-11-15
 3. Procurement receipt, harvest finalisation, produce-lot fulfilment, invoicing, customer payment, production-gap, reporting and calendar services.
 4. GitHub Actions syntax and contract workflow.
 5. Shared ScriptLock wrapper for critical multi-sheet workflows: procurement, harvest, fulfilment, invoicing, customer payments, task assignment/execution/status, ledger posting, archive, crop-task generation and calendar mutations.
-14. Extended idempotency records with in-progress/completed/failed states. Critical workflows now write a start marker before mutation, mark success after completion, and block blind retries after a failure or interrupted execution. Request keys are bound to the workflow action.
+14. Extended idempotency records with in-progress/completed/failed states. Critical workflows now write a start marker before mutation, mark success after completion, allow a corrected retry when validation failed before any data write, and block blind retries after a partial write or interrupted execution. Request keys are bound to the workflow action.
 15. Added a read-only workflow integrity report to Reports & Analytics. It checks procurement receipt postings, harvest-to-lot links, fulfilment-to-dispatch movements, produce-lot balances and invoice totals; it reports exceptions without auto-correcting data.
 6. Cumulative batch validation for repeated procurement lines, sales order lines and produce lots before writes.
 7. Task status transition validation, including no-op handling for repeated identical status updates.
@@ -46,7 +46,7 @@ Last updated: 2026-11-15
 2. Frontend does not yet consistently pass stable idempotency request keys for every critical write. Verify and add request keys at the UI boundary.
 3. Server-side role, user and farm-membership authorization is not complete. Keep deployment access set to `MYSELF`; do not expose to workers or public users.
 4. Full argument/return-shape and field-level UI/API audit remains incomplete.
-5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement and that additive schema migration creates missing tabs/appends missing columns without losing existing row data. Latest GitHub Actions run on `625b5d2` passed both contract and workflow invariant suites.
+5. Extend functional tests for payment balance races, task assignment/execution and calendar recurrence. The mocked suite now injects a partial write and verifies that the failed request key blocks a blind retry; it also verifies that the integrity report detects an orphan fulfilment movement and that additive schema migration creates missing tabs/appends missing columns without losing existing row data. Latest GitHub Actions run on `6e7fd05` passed both contract and workflow invariant suites, including validation-only retry and partial-write blocking tests.
 6. Run Apps Script integration tests on a disposable spreadsheet. No live farm spreadsheet may be used for destructive tests.
 7. Verify first-run setup, English/Tamil/Hindi coverage, file/photo attachment handling and voice-capture integration points.
 8. Complete import/export, backup/restore, quota/performance checks, observability and a documented recovery procedure.
