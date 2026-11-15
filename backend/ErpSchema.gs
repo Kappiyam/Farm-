@@ -79,7 +79,7 @@ const ERP_TABLE_DEFINITIONS = Object.freeze({
   Assets: "asset_id|farm_id|asset_name|asset_code|asset_category|manufacturer|model|serial_number|purchase_date|purchase_cost|current_value|location|status|notes|created_at|updated_at",
   AssetUsage: "asset_usage_id|farm_id|asset_id|person_id|task_id|usage_date|start_at|end_at|hours_used|fuel_quantity|fuel_unit|cost|notes|created_at",
   Maintenance: "maintenance_id|farm_id|asset_id|maintenance_type|scheduled_date|completed_date|service_provider|cost|downtime_hours|status|parts_used|notes|created_at|updated_at",
-  CalendarEvents: "event_id|farm_id|title|event_type|start_at|end_at|all_day|site_id|field_id|plot_id|description|recurrence_type|recurrence_interval|recurrence_end|occurrence_limit|status|created_by|created_at|updated_at",
+  CalendarEvents: "event_id|farm_id|title|event_type|start_at|end_at|all_day|site_id|field_id|plot_id|description|recurrence_type|recurrence_interval|recurrence_end|occurrence_limit|status|created_by|created_at|updated_at",\n  CalendarExceptions: "calendar_exception_id|event_id|occurrence_start|exception_type|override_json|reason|created_at",
   EventParticipants: "event_participant_id|event_id|person_id|team_id|participation_role|status|created_at",
   Notifications: "notification_id|farm_id|user_id|notification_type|title|message|read_at|created_at",
   SavedViews: "saved_view_id|user_id|farm_id|view_name|module_key|view_config|is_default|created_at|updated_at",
