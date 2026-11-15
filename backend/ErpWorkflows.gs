@@ -7,11 +7,15 @@ function erpReceiveProcurement(procurementId, receipts, requestKey) {
   return erpRunLockedWorkflow_("erpReceiveProcurement",requestKey,function(){
     var order=erpFindByKey_("ProcurementOrders","procurement_id",procurementId);
     if(!order)throw new Error("Procurement order not found.");
+    var supplier=order.supplier_id&&erpFindByKey_("Suppliers","supplier_id",order.supplier_id);
+    if(order.supplier_id&&(!supplier||String(supplier.farm_id)!==String(order.farm_id)||!erpActive_(supplier.status)))throw new Error("Procurement supplier is not active for this farm.");
     var lines=erpReadTable_("ProcurementLines").filter(function(x){return String(x.procurement_id)===String(procurementId);});
     var requested={},prepared=[];
     (receipts||[]).forEach(function(r){
       var line=lines.find(function(x){return String(x.procurement_line_id)===String(r.procurement_line_id);});
-      if(!line)throw new Error("A receipt line does not belong to this procurement order.");
+      if(!line||String(line.farm_id)!==String(order.farm_id))throw new Error("A receipt line does not belong to this procurement order and farm.");
+      var item=erpFindByKey_("InventoryItems","item_id",line.item_id);
+      if(!item||String(item.farm_id)!==String(order.farm_id)||!erpActive_(item.status))throw new Error("Receipt item is not active for this farm.");
       var qty=Number(r.quantity);
       if(!isFinite(qty)||qty<=0)throw new Error("Receipt quantity must be positive.");
       requested[line.procurement_line_id]=(requested[line.procurement_line_id]||0)+qty;
