@@ -327,7 +327,7 @@ function erpStoreIdempotency_(key,action,result){
   else erpAppend_("IdempotencyKeys",Object.assign({request_key:key,started_at:new Date().toISOString(),created_at:new Date().toISOString()},patch));
 }
 
-function erpArchive(tableName,id,reason){return erpRunLockedWorkflow_("erpArchive",null,function(){return erpArchiveUnlocked_(tableName,id,reason);});}
+function erpArchive(tableName,id,reason,requestKey){return erpRunLockedWorkflow_("erpArchive",requestKey,function(){return erpArchiveUnlocked_(tableName,id,reason);});}
 
 function erpUpdateTaskStatus(taskId,status,reason){return erpRunLockedWorkflow_("erpUpdateTaskStatus",null,function(){return erpUpdateTaskStatusUnlocked_(taskId,status,reason);});}
 
