@@ -88,6 +88,8 @@ function erpReceiveProcurement(procurementId,receipts,requestKey){
   const order=erpGetRecord_("ProcurementOrders",procurementId);
   if(["cancelled","closed"].includes(String(order.status||"").toLowerCase()))throw new Error("This procurement order is closed.");
   const grouped={},requestedByLine={};
+  const inventoryBefore=erpRead_("InventoryTransactions",{limit:1000}).rows;
+  const postedKeys=new Set(inventoryBefore.map(t=>String(t.idempotency_key||"")));
   receipts.forEach(r=>{
     const line=erpGetRecord_("ProcurementLines",r.procurement_line_id);
     if(String(line.procurement_id)!==String(procurementId))throw new Error("Receipt line does not belong to this procurement order.");
@@ -103,8 +105,6 @@ function erpReceiveProcurement(procurementId,receipts,requestKey){
     const alreadyPosted=postedKeys.has(requestReceiptKey);
     if(!alreadyPosted)requestedByLine[line.procurement_line_id]=(requestedByLine[line.procurement_line_id]||0)+qty;
   });
-  const inventoryBefore=erpRead_("InventoryTransactions",{limit:1000}).rows;
-  const postedKeys=new Set(inventoryBefore.map(t=>String(t.idempotency_key||"")));
   Object.keys(requestedByLine).forEach(lineId=>{
     const line=erpGetRecord_("ProcurementLines",lineId);
     const alreadyReceived=inventoryBefore.filter(t=>String(t.reference_type)==="ProcurementLine"&&
