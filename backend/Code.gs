@@ -3,7 +3,7 @@
  * Version: 0.4.0
  *
  * Bound to the Farm Management Database spreadsheet.
- * Run setupDatabase() manually once from the Apps Script editor.
+ * Legacy bootstrap retained for reference only. Use erpPreviewSchemaMigration() and erpInstallSchema() for the current FarmERP schema.
  * This function creates missing tabs only; it never clears existing data.
  */
 
@@ -30,7 +30,7 @@ const TABLE_SCHEMAS = Object.freeze({
   SchemaInfo: ["schema_version", "installed_at", "app_version"]
 });
 
-function setupDatabase() {
+function legacySetupDatabase_() {
   const started = Date.now();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error("No active spreadsheet. Open this bound script from the target database.");
@@ -249,7 +249,7 @@ function jsonResponse_(value) {
  * Multi-farm foundation migration.
  * Safe, additive only: creates missing organisation/farm access tabs and appends
  * missing Farms columns. It never clears, renames, or rewrites existing records.
- * Run upgradeMultiFarmSchema() manually once after deploying this version.
+ * Legacy multi-farm migration retained for reference only. Use the current additive FarmERP migration in ErpSchema.gs.
  */
 const MULTI_FARM_TABLE_SCHEMAS = Object.freeze({
   Organizations: ["organization_id", "organization_name", "organization_code", "status", "created_at", "updated_at"],
@@ -264,7 +264,7 @@ const FARM_ADDITIONAL_COLUMNS = [
   "contact_phone", "contact_email"
 ];
 
-function upgradeMultiFarmSchema() {
+function legacyUpgradeMultiFarmSchema_() {
   const started = Date.now();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error("No active spreadsheet. Open this bound script from the target database.");
