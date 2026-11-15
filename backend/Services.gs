@@ -4,7 +4,7 @@
  * Spreadsheet tables are append-only schema migrations; transactions are ledger based.
  */
 const ERP_VERSION = "1.0.0";
-const ERP_SCHEMA_VERSION = "1.0.0";
+const ERP_SCHEMA_VERSION = "1.0.2";
 
 const ERP_TABLES = Object.freeze({
   Organizations: ["organization_id","organization_name","organization_code","status","created_at","updated_at"],
@@ -189,7 +189,37 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
 });
 
+function erpPreviewSchemaMigration(){
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss)throw new Error("FarmERP database spreadsheet is unavailable.");
+  const createTabs=[],appendColumns=[],mismatches=[];
+  Object.keys(ERP_TABLES).forEach(name=>{
+    const expected=ERP_TABLES[name],sh=ss.getSheetByName(name);
+    if(!sh){createTabs.push({table:name,columns:expected.length});return;}
+    const actual=sh.getLastColumn()?sh.getRange(1,1,1,sh.getLastColumn()).getDisplayValues()[0].filter(Boolean):[];
+    if(!actual.length){appendColumns.push({table:name,columns:expected.slice()});return;}
+    const missing=expected.filter(h=>!actual.includes(h));
+    if(missing.length)appendColumns.push({table:name,columns:missing});
+    const key=ERP_KEYS[name];
+    if(key&&actual[0]!==key)mismatches.push({table:name,expectedKey:key,actualFirstColumn:actual[0]||""});
+  });
+  return {ok:mismatches.length===0,readOnly:true,schemaVersion:ERP_SCHEMA_VERSION,
+    tableCount:Object.keys(ERP_TABLES).length,createTabs:createTabs,appendColumns:appendColumns,mismatches:mismatches};
+}
+function erpInstallSchema(){
+  const before=erpPreviewSchemaMigration();
+  if(!before.ok)throw new Error("Schema installation stopped because a primary-key column does not match. Review erpPreviewSchemaMigration().");
+  const applied=erpEnsureSchema_();
+  const after=erpPreviewSchemaMigration();
+  if(!after.ok||after.createTabs.length||after.appendColumns.length)
+    throw new Error("Schema installation did not complete cleanly. Review the migration preview.");
+  return {ok:true,schemaVersion:ERP_SCHEMA_VERSION,createdTabs:applied.created,
+    appendedColumns:applied.appended,tableCount:Object.keys(ERP_TABLES).length};
+}
+
 function erpEnsureSchema_() {
+  const preview=erpPreviewSchemaMigration();
+  if(!preview.ok)throw new Error("Schema migration stopped: primary-key mismatch. Review erpPreviewSchemaMigration().");
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   if(!ss) throw new Error("FarmERP database spreadsheet is unavailable.");
   const created=[], appended=[];
