@@ -326,3 +326,50 @@ function erpGetDailyWorkPlanner(farmId,planDate){
       "Order harvest gap is calculated after order-specific lot reservations and shared unallocated saleable stock; no unit conversion is inferred.",
       "Observations and order requirements remain source records until a manager explicitly creates and allocates tasks."]};
 }
+
+
+/** Create an unassigned harvest task linked to its source order and line. */
+function erpCreateTaskFromSalesOrderLine(salesLineId,quantityToHarvest,requestKey){
+  if(!requestKey)throw new Error("A stable order-harvest task request key is required.");
+  const line=erpGetRecord_("SalesOrderLines",salesLineId);
+  const order=erpGetRecord_("SalesOrders",line.sales_order_id);
+  if(["cancelled","closed","completed","delivered","rejected","draft"].includes(String(order.status||"").toLowerCase()))
+    throw new Error("This sales order is not open for harvest planning.");
+  const product=erpGetRecord_("Products",line.product_id);
+  if(!product.crop_id)throw new Error("Link the sales product to a crop before creating a harvest task.");
+  const remaining=Math.max(0,(Number(line.quantity_ordered)||0)-(Number(line.quantity_fulfilled)||0));
+  const qty=Number(quantityToHarvest);
+  if(!(qty>0)||!isFinite(qty)||qty>remaining+0.000001)
+    throw new Error("Harvest task quantity must be positive and cannot exceed the unfulfilled order line.");
+  const crop=erpGetRecord_("Crops",product.crop_id);
+  const variety=product.variety_id?erpGetRecord_("Varieties",product.variety_id):null;
+  const targetDate=erpDateKey_(order.required_date||order.order_date);
+  const candidates=erpRead_("CropCycles",{limit:5000,farmId:order.farm_id}).rows.filter(c=>
+    String(c.crop_id)===String(product.crop_id)&&
+    (!product.variety_id||String(c.variety_id||"")===String(product.variety_id))&&
+    !["terminated","cancelled","completed","draft","proposed","inactive","rejected"].includes(String(c.status||"").toLowerCase()));
+  candidates.sort((a,b)=>{
+    const ad=erpDateKey_(a.expected_end_date||a.start_date),bd=erpDateKey_(b.expected_end_date||b.start_date);
+    const av=ad?Math.abs(new Date(ad).getTime()-new Date(targetDate).getTime()):Number.MAX_SAFE_INTEGER;
+    const bv=bd?Math.abs(new Date(bd).getTime()-new Date(targetDate).getTime()):Number.MAX_SAFE_INTEGER;
+    return av-bv;
+  });
+  const cycle=candidates[0]||null;
+  const customer=erpGetRecord_("Customers",order.customer_id);
+  const title="Harvest "+(product.product_name||crop.crop_name)+(variety?" · "+variety.variety_name:"")+
+    " for "+(order.order_number||order.sales_order_id);
+  const task=erpSave("Tasks",{
+    farm_id:order.farm_id,field_id:cycle&&cycle.field_id||"",plot_id:cycle&&cycle.plot_id||"",
+    crop_cycle_id:cycle&&cycle.crop_cycle_id||"",sales_order_id:order.sales_order_id,sales_line_id:line.sales_line_id,
+    required_quantity:qty,required_unit:line.unit||product.base_unit||"",
+    required_grade:line.grade||product.grade||"",work_window_start:targetDate,work_window_end:targetDate,
+    title:title,description:"Order-driven harvest requirement for "+(customer.customer_name||"buyer")+
+      ". Source order "+(order.order_number||order.sales_order_id)+", line "+line.sales_line_id+
+      ". Harvest quantity is a manager-approved work requirement; it does not fulfil or dispatch the order.",
+    task_type:"order_harvest",priority:"high",status:"planned",planned_start:targetDate,due_at:targetDate,
+    created_by:erpActor_()
+  },requestKey);
+  return {ok:true,task:task.record,created:task.created,duplicate:!!task.duplicate,
+    source:{sales_order_id:order.sales_order_id,sales_line_id:line.sales_line_id},
+    suggestedCropCycle:cycle&&cycle.crop_cycle_id||""};
+}
