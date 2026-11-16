@@ -220,6 +220,115 @@ function erpInstallSchema(){
     appendedColumns:applied.appended,tableCount:Object.keys(ERP_TABLES).length};
 }
 
+
+/**
+ * Kappiyam reference profile: create the known farm hierarchy as ordinary,
+ * editable master records. No areas, soil values, pump groups or physical
+ * valve labels are invented where the project data has not supplied them.
+ */
+function erpKappiyamProfileRecord_(table,keyField,keyValue,record){
+  const rows=erpRead_(table,{limit:1000}).rows;
+  const matches=rows.filter(r=>String(r[keyField]||"").trim().toLowerCase()===String(keyValue).trim().toLowerCase());
+  if(matches.length>1)return {action:"conflict",table:table,key:keyValue,reason:"More than one matching code exists.",matches:matches.length};
+  if(matches.length===1){
+    const existing=matches[0],key=ERP_KEYS[table];
+    const compareFields=Object.keys(record).filter(k=>k!==key&&record[k]!==""&&record[k]!==null&&record[k]!==undefined);
+    const mismatches=compareFields.filter(k=>String(existing[k]??"").trim().toLowerCase()!==String(record[k]).trim().toLowerCase());
+    return mismatches.length?
+      {action:"conflict",table:table,key:keyValue,id:existing[key],reason:"Existing record has different values for: "+mismatches.join(", ")}:
+      {action:"exists",table:table,key:keyValue,id:existing[key],record:existing};
+  }
+  return {action:"create",table:table,key:keyValue,record:record};
+}
+
+function erpKappiyamProfileDefinition_(){
+  return {
+    organization:{table:"Organizations",keyField:"organization_code",keyValue:"KAPPIYAM",
+      record:{organization_name:"Kappiyam Organic Farm",organization_code:"KAPPIYAM",status:"active"}},
+    farm:{table:"Farms",keyField:"farm_code",keyValue:"KAPPIYAM",
+      record:{farm_name:"Kappiyam Organic Farm",farm_code:"KAPPIYAM",country_code:"IN",timezone:"Asia/Kolkata",
+        default_language:"en",currency_code:"INR",area_unit:"acre",farm_address:"Madampatti, Kuppanur, Coimbatore, Tamil Nadu, India",status:"active"}},
+    site:{table:"Sites",keyField:"site_code",keyValue:"MADAMPATTI",
+      record:{site_name:"Madampatti",site_code:"MADAMPATTI",address:"Madampatti, Kuppanur, Coimbatore, Tamil Nadu, India",status:"active"}},
+    fields:["A","B","C"].map(code=>({code:code,record:{field_name:"Field "+code,field_code:code,status:"active"}})),
+    plotCodes:["A1","A2","A3","A4","A5","A6","A7","A8","A9",
+      "B1","B2","B3","B4","B5","B6","B7","B8","B9","B10","B11","B12","B13","B14","B15","B16","B17","B18","B19","B20",
+      "C1","C2"],
+    infrastructure:{table:"Infrastructure",keyField:"code",keyValue:"FIELD-B-PATH",
+      record:{infrastructure_type:"path",name:"Field B internal pathway",code:"FIELD-B-PATH",
+        description:"12-ft internal pathway; exact alignment and surveyed area to be configured.",status:"active"}}
+  };
+}
+
+/** Read-only preview for the known 31-plot Kappiyam reference profile. */
+function erpPreviewKappiyamFarmProfile(){
+  const d=erpKappiyamProfileDefinition_();
+  const org=erpKappiyamProfileRecord_(d.organization.table,d.organization.keyField,d.organization.keyValue,d.organization.record);
+  const farmRecord=Object.assign({},d.farm.record,{organization_id:org.id||"<created during install>"});
+  const farm=erpKappiyamProfileRecord_(d.farm.table,d.farm.keyField,d.farm.keyValue,farmRecord);
+  const farmId=farm.id||"<created during install>";
+  const siteRecord=Object.assign({},d.site.record,{farm_id:farmId});
+  const site=erpKappiyamProfileRecord_(d.site.table,d.site.keyField,d.site.keyValue,siteRecord);
+  const siteId=site.id||"<created during install>";
+  const fields=d.fields.map(x=>{
+    const record=Object.assign({},x.record,{farm_id:farmId,site_id:siteId});
+    return Object.assign({code:x.code},erpKappiyamProfileRecord_("Fields","field_code",x.code,record));
+  });
+  const fieldByCode={};
+  fields.forEach(x=>{if(x.id)fieldByCode[x.code]=x.id;});
+  const plots=d.plotCodes.map(code=>{
+    const fieldCode=code.charAt(0),fieldId=fieldByCode[fieldCode]||("<field "+fieldCode+" created during install>");
+    const record={farm_id:farmId,field_id:fieldId,plot_name:code,plot_code:code,status:"active"};
+    return Object.assign({code:code},erpKappiyamProfileRecord_("Plots","plot_code",code,record));
+  });
+  const fieldB=fieldByCode.B||"<field B created during install>";
+  const infraRecord=Object.assign({},d.infrastructure.record,{farm_id:farmId,site_id:siteId,field_id:fieldB});
+  const infrastructure=erpKappiyamProfileRecord_(d.infrastructure.table,d.infrastructure.keyField,d.infrastructure.keyValue,infraRecord);
+  const records=[org,farm,site].concat(fields,plots,[infrastructure]);
+  const conflicts=records.filter(x=>x.action==="conflict");
+  return {ok:conflicts.length===0,readOnly:true,profile:"Kappiyam Organic Farm",
+    counts:{organizations:1,farms:1,sites:1,fields:3,plots:31,infrastructure:1,total:38},
+    existing:records.filter(x=>x.action==="exists").length,
+    toCreate:records.filter(x=>x.action==="create").length,
+    conflicts:conflicts,
+    plotCodes:d.plotCodes,
+    notes:["Field A: A1–A9; Field B: B1–B20; Field C: C1–C2.",
+      "Field B pathway is stored as infrastructure, not as a cultivation plot.",
+      "Areas, soil test values, irrigation-zone assignments and physical valve labels are not invented; enter verified values in the editable records."]
+  };
+}
+
+/** Idempotently installs the Kappiyam reference profile; each row has a stable request key. */
+function erpInstallKappiyamFarmProfile(){
+  const preview=erpPreviewKappiyamFarmProfile();
+  if(!preview.ok)throw new Error("Kappiyam profile installation stopped. Resolve these existing-record conflicts first: "+preview.conflicts.map(x=>x.table+" "+x.key+": "+x.reason).join("; "));
+  const d=erpKappiyamProfileDefinition_(),created=[],existing=[];
+  function ensure(table,keyField,keyValue,record){
+    const check=erpKappiyamProfileRecord_(table,keyField,keyValue,record);
+    if(check.action==="conflict")throw new Error("Profile record changed during installation: "+table+" "+keyValue);
+    if(check.action==="exists"){existing.push(table+":"+keyValue);return check.record;}
+    const saved=erpSave(table,record,"kappiyam-profile-v1:"+table+":"+keyValue);
+    created.push(table+":"+keyValue);
+    return saved.record;
+  }
+  const organization=ensure(d.organization.table,d.organization.keyField,d.organization.keyValue,d.organization.record);
+  const farm=ensure(d.farm.table,d.farm.keyField,d.farm.keyValue,Object.assign({},d.farm.record,{organization_id:organization.organization_id}));
+  const site=ensure(d.site.table,d.site.keyField,d.site.keyValue,Object.assign({},d.site.record,{farm_id:farm.farm_id}));
+  const fieldRecords={};
+  d.fields.forEach(x=>{fieldRecords[x.code]=ensure("Fields","field_code",x.code,Object.assign({},x.record,{farm_id:farm.farm_id,site_id:site.site_id}));});
+  d.plotCodes.forEach(code=>{
+    const field=fieldRecords[code.charAt(0)];
+    ensure("Plots","plot_code",code,{farm_id:farm.farm_id,field_id:field.field_id,plot_name:code,plot_code:code,status:"active"});
+  });
+  ensure(d.infrastructure.table,d.infrastructure.keyField,d.infrastructure.keyValue,
+    Object.assign({},d.infrastructure.record,{farm_id:farm.farm_id,site_id:site.site_id,field_id:fieldRecords.B.field_id}));
+  const verified=erpPreviewKappiyamFarmProfile();
+  if(!verified.ok||verified.toCreate)throw new Error("Kappiyam profile installation did not verify cleanly.");
+  return {ok:true,farm_id:farm.farm_id,organization_id:organization.organization_id,site_id:site.site_id,
+    created_count:created.length,existing_count:existing.length,created:created,existing:existing,
+    verified_counts:verified.counts};
+}
+
 function erpEnsureSchema_() {
   const preview=erpPreviewSchemaMigration();
   if(!preview.ok)throw new Error("Schema migration stopped: primary-key mismatch. Review erpPreviewSchemaMigration().");
