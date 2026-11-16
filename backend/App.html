@@ -574,10 +574,27 @@
   const button=$("#run-demand");button.disabled=true;button.textContent="Calculating…";
   try{
    const result=await call("erpCalculateProductionGap",state.farmId,$("#demand-start").value,$("#demand-end").value);
-   const rows=result.rows||[],cols=["crop_name","unit","confirmed_demand","forecast_demand","available_stock","projected_crop_supply","gap_confirmed","gap_including_forecast","confidence"];
-   $("#demand-results").innerHTML=rows.length?'<div class="table-wrap demand-table"><table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+cols.map(c=>'<td>'+esc(row[c])+'</td>').join("")+'</tr>').join("")+'</tbody></table></div><div class="notice">'+esc(result.methodology)+' '+esc((result.limitations||[]).join(" "))+'</div>':'<div class="empty"><strong>No demand or supply records for this period</strong><span>Enter confirmed demand, forecast demand, crop cycles and available produce lots.</span></div>';
+   state.demandForecast=result;
+   state.demandForecastRequestKey="forecast-version:"+state.farmId+":"+((window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+"-"+Math.random());
+   const rows=result.rows||[],cols=["crop_name","variety_name","grade","unit","confirmed_demand","forecast_demand","available_stock","projected_crop_supply","gap_confirmed","gap_including_forecast","additional_production_required","gross_production_required","required_plant_count","required_seedling_quantity","required_seed_quantity","required_planting_material_quantity","required_cultivation_area","area_unit","required_compost_quantity","compost_unit","latest_safe_planting_date","nursery_sow_date","seed_procurement_by","compost_ready_by","confidence","planning_assumption_status"];
+   $("#demand-results").innerHTML=rows.length?'<div class="table-wrap demand-table"><table><thead><tr>'+cols.map(c=>'<th>'+esc(labelField(c))+'</th>').join("")+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+cols.map(c=>'<td>'+esc(row[c]===null||row[c]===undefined?"—":row[c])+'</td>').join("")+'</tr>').join("")+'</tbody></table></div><div class="actions" style="margin:12px 0"><button class="btn secondary" id="save-forecast-version">Save forecast version</button></div><div class="notice">'+esc(result.methodology)+' '+esc((result.limitations||[]).join(" "))+'</div>':'<div class="empty"><strong>No demand or supply records for this period</strong><span>Enter confirmed demand, forecast demand, crop cycles and available produce lots.</span></div>';
+   const saveButton=$("#save-forecast-version");if(saveButton)saveButton.onclick=saveDemandForecastVersion;
   }catch(e){$("#demand-results").innerHTML='<div class="error">'+esc(e.message)+'</div>';}
   finally{button.disabled=false;button.textContent="Calculate production gap";}
+ }
+ async function saveDemandForecastVersion(){
+  const button=$("#save-forecast-version");if(!button||!state.demandForecastRequestKey)return;
+  button.disabled=true;button.textContent="Saving version…";
+  try{
+   const saved=await call("erpCreateForecastVersion",state.farmId,$("#demand-start").value,$("#demand-end").value,state.demandForecastRequestKey);
+   button.textContent=saved.duplicate?"Version already saved":"Forecast version saved";
+   button.disabled=true;
+   toast("Forecast version saved · "+saved.forecastVersion.forecast_version_id);
+   state.demandForecastRequestKey="";
+   state.table="ForecastVersions";
+   state.offset=0;
+   fetchRows();
+  }catch(e){button.disabled=false;button.textContent="Retry saving forecast version";toast(e.message,true);}
  }
  function calYmd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
  function calDate(value){const a=String(value||"").slice(0,10).split("-").map(Number);return a.length===3?new Date(a[0],a[1]-1,a[2]):new Date();}
