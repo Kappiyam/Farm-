@@ -266,8 +266,8 @@ const draftSupplyCycle=save("CropCycles",{farm_id:farm1.farm_id,field_id:loc1.fi
 const planHarvest=save("HarvestSessions",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,
   plot_id:loc1.plot.plot_id,crop_cycle_id:approvedSupplyCycle.crop_cycle_id,
   harvest_date:"2026-11-10",status:"finalised"});
-save("HarvestLines",{harvest_id:planHarvest.harvest_id,crop_id:planCrop.crop_id,
-  variety_id:planVariety.variety_id,quantity:40,unit:"kg",grade:"",disposition:"saleable"});
+context.erpFinalizeHarvest(planHarvest.harvest_id,[{crop_id:planCrop.crop_id,
+  variety_id:planVariety.variety_id,quantity:40,unit:"kg",grade:"",disposition:"own_use"}],"plan-harvest-once");
 const planResult=context.erpCalculateProductionGap(farm1.farm_id,"2026-12-01","2026-12-31");
 const planRow=planResult.rows.find(x=>x.crop_id===planCrop.crop_id&&x.variety_id===planVariety.variety_id);
 assert(!!planRow,"Demand planner should return the crop/variety demand bucket.");
