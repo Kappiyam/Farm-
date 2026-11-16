@@ -43,6 +43,89 @@ function erpReadReportRows_(table,farmId){
   const parentIds=new Set(parents.map(r=>String(r[ERP_KEYS[relation[0]]]||"")));
   return rows.filter(r=>parentIds.has(String(r[relation[1]]||"")));
 }
+
+/**
+ * Read-only health scan for the connected Sheets database.
+ * Scans at most 2,000 data rows per table and reports truncation explicitly.
+ * It never repairs, edits, archives or deletes farm data.
+ */
+function erpGetDatabaseDiagnostics(){
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  if(!ss)throw new Error("FarmERP database spreadsheet is unavailable.");
+  const preview=erpPreviewSchemaMigration(),maxRows=2000;
+  const tables={},issues=[],totals={rows:0,rowsScanned:0,missingPrimaryKeys:0,duplicatePrimaryKeys:0,
+    missingRequiredValues:0,duplicateUniqueValues:0,orphanRelations:0};
+  const add=(table,category,field,count)=>{if(count>0)issues.push({table:table,category:category,field:field||"",count:count});};
+  Object.keys(ERP_TABLES).forEach(table=>{
+    const sh=ss.getSheetByName(table);
+    if(!sh){tables[table]={exists:false,rowCount:0,scanned:0,truncated:false};return;}
+    const lastRow=sh.getLastRow(),lastCol=sh.getLastColumn();
+    const headers=lastCol?sh.getRange(1,1,1,lastCol).getDisplayValues()[0]:[];
+    const rowCount=Math.max(0,lastRow-1),scanned=Math.min(rowCount,maxRows);
+    const values=scanned&&lastCol?sh.getRange(2,1,scanned,lastCol).getValues():[];
+    const rows=values.map(line=>{const item={};headers.forEach((h,i)=>{if(h)item[h]=line[i];});return item;});
+    tables[table]={exists:true,rowCount:rowCount,scanned:scanned,truncated:rowCount>scanned,
+      headers:headers.length,expectedColumns:ERP_TABLES[table].length};
+    totals.rows+=rowCount;totals.rowsScanned+=scanned;
+    const key=ERP_KEYS[table],seenKeys=new Set();let missingKey=0,duplicateKey=0;
+    rows.forEach(row=>{
+      const value=String(row[key]??"").trim();
+      if(!value){missingKey++;return;}
+      if(seenKeys.has(value))duplicateKey++;else seenKeys.add(value);
+    });
+    totals.missingPrimaryKeys+=missingKey;totals.duplicatePrimaryKeys+=duplicateKey;
+    add(table,"missing_primary_key",key,missingKey);add(table,"duplicate_primary_key",key,duplicateKey);
+    const required=ERP_REQUIRED[table]||[];let requiredMissing=0;
+    rows.forEach(row=>required.forEach(field=>{if(row[field]===null||row[field]===undefined||String(row[field]).trim()==="")requiredMissing++;}));
+    totals.missingRequiredValues+=requiredMissing;add(table,"missing_required_value","",requiredMissing);
+    const uniqueFields=ERP_UNIQUE_FIELDS[table]||[],seenUnique=new Set();let duplicateUnique=0;
+    if(uniqueFields.length)rows.forEach(row=>{
+      const values=uniqueFields.map(k=>String(row[k]??"").trim().toLowerCase());
+      if(values.every(Boolean)){
+        const compound=values.join("\u001f");
+        if(seenUnique.has(compound))duplicateUnique++;else seenUnique.add(compound);
+      }
+    });
+    totals.duplicateUniqueValues+=duplicateUnique;add(table,"duplicate_unique_value",uniqueFields.join("+"),duplicateUnique);
+    tables[table].rows=rows;
+  });
+  const parentKeys={};
+  Object.keys(ERP_KEYS).forEach(table=>{
+    const data=tables[table];
+    if(data&&data.exists&&!data.truncated)
+      parentKeys[table]=new Set((data.rows||[]).map(r=>String(r[ERP_KEYS[table]]??"")).filter(Boolean));
+  });
+  Object.keys(ERP_TABLES).forEach(table=>{
+    const data=tables[table];if(!data||!data.exists)return;
+    let orphanCount=0,skippedRelations=0;
+    (data.rows||[]).forEach(row=>{
+      Object.keys(row).forEach(field=>{
+        const parent=ERP_RELATIONS[field],value=String(row[field]??"").trim();
+        if(!parent||!value)return;
+        if(!parentKeys[parent]){skippedRelations++;return;}
+        if(!parentKeys[parent].has(value))orphanCount++;
+      });
+    });
+    totals.orphanRelations+=orphanCount;
+    add(table,"orphan_relation","",orphanCount);
+    data.relationshipChecksSkipped=skippedRelations;
+    delete data.rows;
+  });
+  const missingTabs=preview.createTabs.length,missingColumns=preview.appendColumns.reduce((n,x)=>n+x.columns.length,0);
+  const summary={spreadsheetName:ss.getName(),spreadsheetId:ss.getId(),schemaVersion:ERP_SCHEMA_VERSION,
+    expectedTables:Object.keys(ERP_TABLES).length,existingTables:Object.keys(tables).filter(t=>tables[t].exists).length,
+    missingTables:missingTabs,missingColumns:missingColumns,primaryKeyMismatches:preview.mismatches.length,
+    rows:totals.rows,rowsScanned:totals.rowsScanned,truncatedTables:Object.keys(tables).filter(t=>tables[t].truncated).length,
+    missingPrimaryKeys:totals.missingPrimaryKeys,duplicatePrimaryKeys:totals.duplicatePrimaryKeys,
+    missingRequiredValues:totals.missingRequiredValues,duplicateUniqueValues:totals.duplicateUniqueValues,
+    orphanRelations:totals.orphanRelations,issueGroups:issues.length};
+  return {ok:issues.length===0&&!missingTabs&&!missingColumns&&!preview.mismatches.length,
+    report:"system-health",summary:summary,tableDetails:Object.keys(tables).map(name=>({table:name,exists:tables[name].exists,
+      rowCount:tables[name].rowCount,scanned:tables[name].scanned,truncated:tables[name].truncated,
+      relationshipChecksSkipped:tables[name].relationshipChecksSkipped||0})),
+    rows:issues.slice(0,200),methodology:"Read-only schema, primary-key, required-field, configured uniqueness and foreign-key scan. Maximum 2,000 rows are scanned per table; relationships to truncated parent tables are excluded rather than guessed. No records were modified."};
+}
+
 function erpGetWorkflowIntegrityReport(farmId){
   const issues=[],tolerance=0.000001;
   const read=table=>erpReadReportRows_(table,farmId);
@@ -115,6 +198,11 @@ function erpReport(name,filters){
   const inRange=v=>!v|| (erpDateKey_(v)>=range.start&&erpDateKey_(v)<=range.end);
   const read=(table)=>erpReadReportRows_(table,farmId);
   let rows=[],summary={},methodology="";
+  if(name==="system-health"){
+    const result=erpGetDatabaseDiagnostics();
+    return {ok:true,report:"system-health",period:{start:"Current database snapshot",end:"Current database snapshot"},
+      summary:result.summary,rows:result.rows,methodology:result.methodology};
+  }
   if(name==="integrity"){
     const result=erpGetWorkflowIntegrityReport(farmId);
     return {ok:true,report:"integrity",period:{start:"All records",end:"All records"},summary:{issues:result.issueCount,checks:result.checkCount,passed:result.ok},rows:result.issues,methodology:result.methodology};
