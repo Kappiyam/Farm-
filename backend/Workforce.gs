@@ -311,7 +311,12 @@ function erpGetDailyWorkPlanner(farmId,planDate){
   const present=workerAvailability.filter(w=>w.availability==="available").length;
   const absent=workerAvailability.filter(w=>w.availability==="unavailable").length;
   const unrecorded=workerAvailability.filter(w=>w.availability==="unknown").length;
-  return {ok:true,farmId:farmId,planDate:date,
+  const dayPlans=erpRead_("DailyWorkPlans",{limit:1000,farmId:farmId}).rows
+    .filter(p=>erpDateKey_(p.plan_date)===date)
+    .sort((a,b)=>String(b.updated_at||b.created_at||"").localeCompare(String(a.updated_at||a.created_at||"")));
+  const currentPlan=dayPlans[0]||null;
+  const currentPlanItems=currentPlan?erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:currentPlan.plan_id}}).rows:[];
+  return {ok:true,farmId:farmId,planDate:date,plan:currentPlan,planItems:currentPlanItems,
     sources:{scheduled_tasks:scheduledTasks,scouting_actions:scoutingActions,order_harvest_requirements:harvestRequirements},
     workforce:{workers:workerAvailability,available_count:present,unavailable_count:absent,attendance_unrecorded_count:unrecorded},
     summary:{
@@ -372,4 +377,198 @@ function erpCreateTaskFromSalesOrderLine(salesLineId,quantityToHarvest,requestKe
   return {ok:true,task:task.record,created:task.created,duplicate:!!task.duplicate,
     source:{sales_order_id:order.sales_order_id,sales_line_id:line.sales_line_id},
     suggestedCropCycle:cycle&&cycle.crop_cycle_id||""};
+}
+
+
+function erpDailyPlanChange_(planId,itemId,changeType,reason,before,after,requestKey){
+  return erpSave("DailyWorkPlanChanges",{
+    plan_id:planId,plan_item_id:itemId||"",change_type:changeType,reason:reason,
+    before_json:JSON.stringify(before||{}),after_json:JSON.stringify(after||{}),
+    changed_by:erpActor_(),changed_at:new Date()
+  },requestKey);
+}
+
+/** Save a draft day plan. Publishing is a separate explicit manager action. */
+function erpSaveDailyWorkPlan(farmId,planDate,taskIds,briefingNotes,requestKey){
+  if(!farmId||!requestKey)throw new Error("Farm and a stable day-plan request key are required.");
+  const date=erpDateKey_(planDate);
+  if(!date)throw new Error("A valid plan date is required.");
+  if(!Array.isArray(taskIds))throw new Error("Select the tasks to include in the day plan.");
+  const ids=[...new Set(taskIds.map(x=>String(x||"").trim()).filter(Boolean))];
+  if(ids.length>500)throw new Error("A day plan cannot contain more than 500 tasks.");
+  erpGetRecord_("Farms",farmId);
+  const existingPlans=erpRead_("DailyWorkPlans",{limit:1000,farmId:farmId}).rows
+    .filter(p=>erpDateKey_(p.plan_date)===date)
+    .sort((a,b)=>String(b.updated_at||b.created_at||"").localeCompare(String(a.updated_at||a.created_at||"")));
+  const existing=existingPlans[0]||null;
+  if(existing&&String(existing.status).toLowerCase()!=="draft")
+    throw new Error("Only a draft day plan can be edited. Create or reopen a draft through the plan workflow.");
+  const planRecord={farm_id:farmId,plan_date:date,status:"draft",briefing_notes:briefingNotes||"",
+    created_by:erpActor_()};
+  if(existing)planRecord.plan_id=existing.plan_id;
+  const savedPlan=erpSave("DailyWorkPlans",planRecord,requestKey+":header");
+  const plan=savedPlan.record,oldItems=erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:plan.plan_id}}).rows;
+  const byTask={};oldItems.forEach(x=>byTask[String(x.task_id)]=x);
+  const taskRows=ids.map(id=>erpGetRecord_("Tasks",id));
+  taskRows.forEach(task=>{
+    if(String(task.farm_id)!==String(farmId))throw new Error("A selected task belongs to another farm.");
+    if(erpDateKey_(task.due_at||task.planned_start)!==date)
+      throw new Error("A task must be scheduled for the selected plan date before it can be included.");
+  });
+  const selected=new Set(ids),added=[],removed=[];
+  taskRows.forEach(task=>{
+    const assignments=erpRead_("TaskAssignments",{limit:2000,filter:{task_id:task.task_id}}).rows
+      .filter(a=>!["cancelled","inactive","removed"].includes(String(a.status||"").toLowerCase()));
+    const people=erpRead_("People",{limit:2000}).rows,byPerson={};people.forEach(p=>byPerson[p.person_id]=p);
+    const snapshot=assignments.map(a=>({person_id:a.person_id||"",name:(byPerson[a.person_id]||{}).display_name||"",
+      team_name:a.team_name||"",assignment_role:a.assignment_role||""}));
+    const sourceType=task.sales_order_id?"sales_order":task.crop_cycle_id?"crop_cycle":
+      task.event_id?"calendar_event":String(task.task_type||"").indexOf("scouting")===0?"scouting":"manual_or_scheduled";
+    const sourceReference=task.sales_order_id||task.crop_cycle_id||task.event_id||task.task_id;
+    const prior=byTask[String(task.task_id)];
+    const item={plan_id:plan.plan_id,task_id:task.task_id,source_type:sourceType,
+      source_reference:sourceReference,priority:task.priority||"normal",
+      planned_start:task.planned_start||task.due_at||"",planned_end:task.due_at||"",
+      estimated_duration_minutes:Number(task.estimated_duration_minutes)||0,
+      required_quantity:Number(task.required_quantity)||0,required_unit:task.required_unit||"",
+      required_grade:task.required_grade||"",assignment_snapshot_json:JSON.stringify(snapshot),
+      status:"included",created_by:erpActor_()};
+    if(prior)item.plan_item_id=prior.plan_item_id;
+    const saved=erpSave("DailyWorkPlanItems",item,requestKey+":item:"+task.task_id);
+    if(!prior){
+      added.push(saved.record);
+      erpDailyPlanChange_(plan.plan_id,saved.id,"added","Added to draft day plan.",{},saved.record,requestKey+":change:add:"+task.task_id);
+    }else if(String(prior.status)==="removed"){
+      erpDailyPlanChange_(plan.plan_id,prior.plan_item_id,"reinstated","Task reinstated in draft day plan.",prior,saved.record,
+        requestKey+":change:reopen:"+task.task_id);
+    }
+  });
+  oldItems.forEach(prior=>{
+    if(selected.has(String(prior.task_id))||["removed","deferred"].includes(String(prior.status)))return;
+    const removedItem=erpSave("DailyWorkPlanItems",{plan_item_id:prior.plan_item_id,status:"removed"},requestKey+":item:remove:"+prior.task_id);
+    erpDailyPlanChange_(plan.plan_id,prior.plan_item_id,"removed","Removed from draft day plan.",prior,removedItem.record,
+      requestKey+":change:remove:"+prior.task_id);
+    removed.push(removedItem.record);
+  });
+  return {ok:true,plan:plan,addedCount:added.length,removedCount:removed.length,
+    items:erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:plan.plan_id}}).rows};
+}
+
+/** Publish the manager-approved allocation snapshot without altering task execution status. */
+function erpPublishDailyWorkPlan(planId,requestKey){
+  if(!requestKey)throw new Error("A stable publish request key is required.");
+  const plan=erpGetRecord_("DailyWorkPlans",planId);
+  if(String(plan.status).toLowerCase()==="published")return {ok:true,duplicate:true,plan:plan};
+  if(String(plan.status).toLowerCase()!=="draft")throw new Error("Only a draft day plan can be published.");
+  const items=erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:planId}}).rows
+    .filter(i=>!["removed","deferred"].includes(String(i.status||"").toLowerCase()));
+  if(!items.length)throw new Error("Add at least one task before publishing the day plan.");
+  const unassigned=items.filter(i=>{
+    const assigned=erpRead_("TaskAssignments",{limit:2000,filter:{task_id:i.task_id}}).rows
+      .some(a=>!["cancelled","inactive","removed"].includes(String(a.status||"").toLowerCase()));
+    return !assigned;
+  });
+  const highPriorityUnassigned=unassigned.filter(i=>["critical","urgent","high"].includes(String(i.priority||"").toLowerCase()));
+  const next=erpSave("DailyWorkPlans",{plan_id:planId,status:"published",
+    published_by:erpActor_(),published_at:new Date()},requestKey);
+  erpDailyPlanChange_(planId,"","published","Manager published the daily work plan.",
+    {status:"draft"},{status:"published",item_count:items.length,unassigned_count:unassigned.length},
+    requestKey+":change");
+  return {ok:true,duplicate:!!next.duplicate,plan:next.record,itemCount:items.length,
+    unassignedCount:unassigned.length,highPriorityUnassignedCount:highPriorityUnassigned.length,
+    warnings:highPriorityUnassigned.length?["High-priority tasks remain unassigned. Confirm allocation before field execution."]:[]};
+}
+
+/** Defer a task while preserving its original worker assignments and recording the reason. */
+function erpDeferDailyWorkPlanItem(planItemId,newDate,reason,requestKey){
+  if(!requestKey)throw new Error("A stable deferral request key is required.");
+  if(!reason||!String(reason).trim())throw new Error("Record a reason for deferring the task.");
+  const item=erpGetRecord_("DailyWorkPlanItems",planItemId),plan=erpGetRecord_("DailyWorkPlans",item.plan_id);
+  if(String(plan.status).toLowerCase()==="closed")throw new Error("A closed day plan cannot be changed.");
+  const target=erpDateKey_(newDate);if(!target)throw new Error("A valid deferral date is required.");
+  const task=erpGetRecord_("Tasks",item.task_id),before={item:item,task_due_at:task.due_at,task_planned_start:task.planned_start};
+  const savedTask=erpSave("Tasks",{task_id:task.task_id,due_at:target,planned_start:target,
+    deferral_reason:String(reason).trim()},requestKey+":task");
+  const savedItem=erpSave("DailyWorkPlanItems",{plan_item_id:planItemId,status:"deferred",
+    deferred_to:target,deferral_reason:String(reason).trim()},requestKey+":item");
+  erpDailyPlanChange_(plan.plan_id,planItemId,"deferred",String(reason).trim(),before,
+    {item:savedItem.record,task_due_at:savedTask.record.due_at},requestKey+":change");
+  return {ok:true,item:savedItem.record,task:savedTask.record,assignmentsPreserved:true};
+}
+
+/** Split a measured harvest/work quantity into a new unassigned sibling task. */
+function erpSplitDailyWorkPlanItem(planItemId,splitQuantity,requestKey){
+  if(!requestKey)throw new Error("A stable split request key is required.");
+  const item=erpGetRecord_("DailyWorkPlanItems",planItemId),plan=erpGetRecord_("DailyWorkPlans",item.plan_id);
+  if(String(plan.status).toLowerCase()==="closed")throw new Error("A closed day plan cannot be split.");
+  const original=erpGetRecord_("Tasks",item.task_id),total=Number(original.required_quantity)||0,split=Number(splitQuantity);
+  if(!(total>0)||!(split>0)||!isFinite(split)||split>=total)
+    throw new Error("Split quantity must be positive and smaller than the task's remaining required quantity.");
+  const before={task:original,item:item};
+  const updated=erpSave("Tasks",{task_id:original.task_id,required_quantity:total-split},requestKey+":original");
+  const copy=Object.assign({},original);
+  ["task_id","created_at","updated_at","status_history"].forEach(k=>delete copy[k]);
+  copy.title=(original.title||"Task")+" (split)";
+  copy.required_quantity=split;copy.status="planned";copy.created_by=erpActor_();
+  const newTask=erpSave("Tasks",copy,requestKey+":split-task");
+  const assignments=erpRead_("TaskAssignments",{limit:2000,filter:{task_id:original.task_id}}).rows;
+  const savedItem=erpSave("DailyWorkPlanItems",{
+    plan_id:plan.plan_id,task_id:newTask.id,source_type:item.source_type,source_reference:item.source_reference,
+    priority:item.priority,planned_start:original.planned_start||original.due_at||"",
+    planned_end:original.due_at||"",estimated_duration_minutes:original.estimated_duration_minutes||0,
+    required_quantity:split,required_unit:original.required_unit||"",required_grade:original.required_grade||"",
+    assignment_snapshot_json:"[]",status:"included",manager_notes:"Split from "+original.task_id,created_by:erpActor_()
+  },requestKey+":plan-item");
+  erpDailyPlanChange_(plan.plan_id,planItemId,"split","Task split into two work quantities.",before,
+    {originalTask:updated.record,newTask:newTask.record,newPlanItem:savedItem.record,
+      originalAssignmentsPreserved:assignments.length>0},requestKey+":change");
+  return {ok:true,originalTask:updated.record,newTask:newTask.record,newPlanItem:savedItem.record,
+    originalAssignmentsPreserved:assignments.length>0,newTaskAssigned:false};
+}
+
+/** Close a published day plan with a structured execution and exception snapshot. */
+function erpCloseDailyWorkPlan(planId,closeoutNotes,requestKey){
+  if(!requestKey)throw new Error("A stable close-out request key is required.");
+  const plan=erpGetRecord_("DailyWorkPlans",planId);
+  if(String(plan.status).toLowerCase()==="closed"){
+    return {ok:true,duplicate:true,plan:plan,closeout:erpProductionJson_(plan.closeout_json)};
+  }
+  if(String(plan.status).toLowerCase()!=="published")throw new Error("Publish the day plan before closing it.");
+  const items=erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:planId}}).rows
+    .filter(i=>!["removed"].includes(String(i.status||"").toLowerCase()));
+  const counts={completed:0,partial:0,blocked:0,overdue:0,unassigned:0,deferred:0,open:0};
+  const taskIds=items.map(i=>i.task_id),tasks=erpRead_("Tasks",{limit:5000}).rows.filter(t=>taskIds.includes(t.task_id));
+  const assignments=erpRead_("TaskAssignments",{limit:10000}).rows;
+  const execution=erpRead_("TaskExecution",{limit:20000}).rows.filter(e=>taskIds.includes(e.task_id));
+  const taskSummary=items.map(item=>{
+    const task=tasks.find(t=>String(t.task_id)===String(item.task_id))||{};
+    const status=String(task.status||"planned").toLowerCase();
+    const actual=execution.filter(e=>String(e.task_id)===String(item.task_id));
+    const assigned=assignments.some(a=>String(a.task_id)===String(item.task_id)&&
+      !["cancelled","inactive","removed"].includes(String(a.status||"").toLowerCase()));
+    if(["completed","verified","done"].includes(status))counts.completed++;
+    else if(status==="blocked")counts.blocked++;
+    else if(actual.length)counts.partial++;
+    else counts.open++;
+    if(!assigned)counts.unassigned++;
+    if(item.status==="deferred")counts.deferred++;
+    if(task.due_at&&erpDateKey_(task.due_at)<erpDateKey_(plan.plan_date)&&
+      !["completed","verified","done","cancelled"].includes(status))counts.overdue++;
+    return {plan_item_id:item.plan_item_id,task_id:item.task_id,title:task.title||"",
+      status:status,assigned:assigned,actual_records:actual.length,
+      actual_minutes:actual.reduce((sum,e)=>sum+(Number(e.duration_minutes)||0),0),
+      actual_quantity:actual.reduce((sum,e)=>sum+(Number(e.quantity)||0),0),
+      actual_area:actual.reduce((sum,e)=>sum+(Number(e.area)||0),0),
+      participants:[...new Set(actual.map(e=>e.person_id).filter(Boolean))]};
+  });
+  const closeout={counts:counts,items:taskSummary,
+    totals:{actual_minutes:taskSummary.reduce((s,x)=>s+x.actual_minutes,0),
+      actual_quantity_lines:taskSummary.reduce((s,x)=>s+x.actual_records,0),
+      actual_area:taskSummary.reduce((s,x)=>s+x.actual_area,0)},
+    notes:closeoutNotes||"",closed_at:new Date(),closed_by:erpActor_()};
+  const saved=erpSave("DailyWorkPlans",{plan_id:planId,status:"closed",
+    closed_by:erpActor_(),closed_at:new Date(),closeout_json:JSON.stringify(closeout)},requestKey);
+  erpDailyPlanChange_(planId,"","closed","End-of-day plan close-out.",
+    {status:"published"},{status:"closed",counts:counts},requestKey+":change");
+  return {ok:true,duplicate:!!saved.duplicate,plan:saved.record,closeout:closeout};
 }
