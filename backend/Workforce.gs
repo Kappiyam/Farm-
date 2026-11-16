@@ -403,9 +403,9 @@ function erpSaveDailyWorkPlan(farmId,planDate,taskIds,briefingNotes,requestKey){
   const existing=existingPlans[0]||null;
   if(existing&&String(existing.status).toLowerCase()!=="draft")
     throw new Error("Only a draft day plan can be edited. Create or reopen a draft through the plan workflow.");
-  const planRecord={farm_id:farmId,plan_date:date,status:"draft",briefing_notes:briefingNotes||"",
+  const planRecord={plan_id:existing?existing.plan_id:"DWP-"+farmId+"-"+date,
+    farm_id:farmId,plan_date:date,status:"draft",briefing_notes:briefingNotes||"",
     created_by:erpActor_()};
-  if(existing)planRecord.plan_id=existing.plan_id;
   const savedPlan=erpSave("DailyWorkPlans",planRecord,requestKey+":header");
   const plan=savedPlan.record,oldItems=erpRead_("DailyWorkPlanItems",{limit:5000,filter:{plan_id:plan.plan_id}}).rows;
   const byTask={};oldItems.forEach(x=>byTask[String(x.task_id)]=x);
@@ -433,7 +433,7 @@ function erpSaveDailyWorkPlan(farmId,planDate,taskIds,briefingNotes,requestKey){
       required_quantity:Number(task.required_quantity)||0,required_unit:task.required_unit||"",
       required_grade:task.required_grade||"",assignment_snapshot_json:JSON.stringify(snapshot),
       status:"included",created_by:erpActor_()};
-    if(prior)item.plan_item_id=prior.plan_item_id;
+    item.plan_item_id=prior?prior.plan_item_id:"DWPI-"+plan.plan_id+"-"+task.task_id;
     const saved=erpSave("DailyWorkPlanItems",item,requestKey+":item:"+task.task_id);
     if(!prior){
       added.push(saved.record);
