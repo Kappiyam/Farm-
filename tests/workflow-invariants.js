@@ -115,7 +115,48 @@ const firstFarmCreate=context.erpSave("Farms",farmRecord,"farm-create-once");
 const duplicateFarm=context.erpSave("Farms",farmRecord,"farm-create-once");
 const farm1=firstFarmCreate.record;
 assert(duplicateFarm.duplicate===true&&rows("Farms").length===1,"Generic save replay must return the original farm.");
+
 const loc1=fieldAndPlot(farm1.farm_id,"A");
+
+// Kappiyam reference setup is read-only in preview, farm-scoped and replay-safe.
+const profilePreview=context.erpPreviewKappiyamFarmProfile();
+assert(profilePreview.ok&&profilePreview.readOnly&&profilePreview.toCreate===38,
+  "Kappiyam profile preview should propose 38 records without writing farm data.");
+assert(rows("Farms").filter(x=>x.farm_code==="KAPPIYAM").length===0,
+  "Kappiyam profile preview must not create farm records.");
+assert(profilePreview.counts.fields===3&&profilePreview.counts.plots===31&&profilePreview.counts.infrastructure===1,
+  "Kappiyam profile should define three fields, 31 cultivation plots and separate infrastructure.");
+const installedProfile=context.erpInstallKappiyamFarmProfile();
+assert(installedProfile.ok&&installedProfile.created_count===38,
+  "Kappiyam profile installer should create the complete reference hierarchy.");
+const kappiyamFarm=rows("Farms").find(x=>x.farm_code==="KAPPIYAM");
+assert(!!kappiyamFarm&&kappiyamFarm.organization_id===rows("Organizations").find(x=>x.organization_code==="KAPPIYAM").organization_id,
+  "Kappiyam farm should belong to the Kappiyam organization.");
+const kappiyamFields=rows("Fields").filter(x=>x.farm_id===kappiyamFarm.farm_id);
+assert(kappiyamFields.length===3&&kappiyamFields.map(x=>x.field_code).sort().join(",")==="A,B,C",
+  "Kappiyam setup should create only fields A, B and C for the configured farm.");
+const kappiyamPlots=rows("Plots").filter(x=>x.farm_id===kappiyamFarm.farm_id);
+assert(kappiyamPlots.length===31&&new Set(kappiyamPlots.map(x=>x.plot_code)).size===31,
+  "Kappiyam setup should create 31 individually identified cultivation plots.");
+assert(kappiyamPlots.filter(x=>String(x.plot_code).startsWith("A")).length===9&&
+  kappiyamPlots.filter(x=>String(x.plot_code).startsWith("B")).length===20&&
+  kappiyamPlots.filter(x=>String(x.plot_code).startsWith("C")).length===2,
+  "Kappiyam plots should be allocated A1–A9, B1–B20 and C1–C2.");
+const pathInfrastructure=rows("Infrastructure").filter(x=>x.farm_id===kappiyamFarm.farm_id&&x.code==="FIELD-B-PATH");
+assert(pathInfrastructure.length===1&&pathInfrastructure[0].field_id===kappiyamFields.find(x=>x.field_code==="B").field_id,
+  "Field B pathway must be recorded as infrastructure, not as a cultivation plot.");
+const stableProfileCount=["Organizations","Farms","Sites","Fields","Plots","Infrastructure"].reduce((n,t)=>n+rows(t).filter(x=>
+  t==="Organizations"?x.organization_code==="KAPPIYAM":
+  t==="Farms"?x.farm_code==="KAPPIYAM":
+  t==="Sites"?x.site_code==="MADAMPATTI"&&x.farm_id===kappiyamFarm.farm_id:
+  t==="Fields"?x.farm_id===kappiyamFarm.farm_id:
+  t==="Plots"?x.farm_id===kappiyamFarm.farm_id:
+  x.farm_id===kappiyamFarm.farm_id).length,0);
+const repeatedProfile=context.erpInstallKappiyamFarmProfile();
+assert(repeatedProfile.created_count===0&&repeatedProfile.existing_count===38,
+  "Reinstalling the Kappiyam profile must not duplicate its records.");
+assert(context.erpPreviewKappiyamFarmProfile().toCreate===0&&stableProfileCount===38,
+  "Kappiyam profile must verify cleanly after installation and replay.");
 
 // Inventory issue: lot balance, plot scope and request replay.
 const item=save("InventoryItems",{item_name:"Vermicompost",item_code:"VC-01",base_unit:"kg",status:"active"});
