@@ -335,7 +335,7 @@ function erpCalculateProductionGap(farmId,startDate,endDate){
       ["confirmed","standing","confirmed_order"].includes(type))return;
     const b=erpBucket_(buckets,cropId,d.unit||product.base_unit,crop.crop_name,varietyId,variety.variety_name||"",product.grade||"");
     const q=Number(d.quantity)||0;
-    if(!(q>0))continue;
+    if(!(q>0))return;
     if(["confirmed","standing","confirmed_order"].includes(type))b.confirmed_demand+=q;
     else b.forecast_demand+=q;
   });
