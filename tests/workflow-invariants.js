@@ -238,7 +238,10 @@ const planProfile=save("CropProfiles",{crop_id:planCrop.crop_id,variety_id:planV
 const planProduct=save("Products",{product_name:"Planning crop produce",crop_id:planCrop.crop_id,
   variety_id:planVariety.variety_id,base_unit:"kg",status:"active"});
 const planStockLot=save("ProduceLots",{farm_id:farm1.farm_id,crop_id:planCrop.crop_id,
-  variety_id:planVariety.variety_id,lot_code:"PLAN-STOCK-01",quantity_available:15,unit:"kg",status:"active"});
+  variety_id:planVariety.variety_id,lot_code:"PLAN-STOCK-01",quantity_available:0,unit:"kg",status:"active"});
+context.erpPostLedger("ProduceLotMovements",{produce_lot_id:planStockLot.produce_lot_id,
+  movement_type:"receipt",quantity:15,unit:"kg",occurred_at:"2026-11-16T08:00:00.000Z",
+  reference_type:"test_opening_stock",reference_id:"PLAN-STOCK-01"},"plan-produce-receipt");
 const planCustomer=save("Customers",{customer_name:"Planning buyer",phone:"9000000099",status:"active"});
 const planOrder=save("SalesOrders",{farm_id:farm1.farm_id,customer_id:planCustomer.customer_id,
   order_date:"2026-11-16",required_date:"2026-12-05",order_number:"SO-PLAN-01",
