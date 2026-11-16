@@ -20,5 +20,7 @@ jobs:
           node-version: "22"
       - name: Check frontend/backend contracts and JavaScript syntax
         run: node tests/contract-check.js
+      - name: Run application-wide FarmERP validator
+        run: node scripts/validate-farmerp.mjs
       - name: Exercise workflow invariants with mocked Sheets services
         run: node tests/workflow-invariants.js
