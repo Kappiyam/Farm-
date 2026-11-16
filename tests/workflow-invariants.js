@@ -425,6 +425,19 @@ const integrity=context.erpGetWorkflowIntegrityReport(farm1.farm_id);
 assert(integrity.issueCount===0,"The valid completed test transactions should pass workflow reconciliation.");
 const report=context.erpReport("integrity",{farmId:farm1.farm_id});
 assert(report.summary.passed===true,"The integrity report UI endpoint should return a passed summary.");
+assert(report.summary.passed===true,"The integrity report UI endpoint should return a passed summary.");
+
+// Database health scan is read-only and does not rely on mocked-only APIs.
+const rowsBeforeDiagnostics=Object.fromEntries(Object.entries(ss.sheets).map(([name,sh])=>[name,sh.getLastRow()]));
+const diagnostics=context.erpGetDatabaseDiagnostics();
+assert(diagnostics.report==="system-health"&&diagnostics.tableDetails.length===Object.keys(schema).length,
+  "Database diagnostics should inspect every canonical table.");
+assert(diagnostics.summary.expectedTables===Object.keys(schema).length&&Array.isArray(diagnostics.rows),
+  "Database diagnostics should return schema counts and grouped data-integrity findings.");
+const rowsAfterDiagnostics=Object.fromEntries(Object.entries(ss.sheets).map(([name,sh])=>[name,sh.getLastRow()]));
+assert(JSON.stringify(rowsBeforeDiagnostics)===JSON.stringify(rowsAfterDiagnostics),
+  "Database diagnostics must not create, update or delete spreadsheet rows.");
+
 
 console.log("WORKFLOW INVARIANT TESTS PASSED");
 console.log("Verified schema install, stock issue, aggregated procurement and fulfilment, invoice/payment, workforce, calendar, replay protection and ledger reconciliation.");
