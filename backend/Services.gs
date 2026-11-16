@@ -303,24 +303,24 @@ function erpInstallKappiyamFarmProfile(){
   const preview=erpPreviewKappiyamFarmProfile();
   if(!preview.ok)throw new Error("Kappiyam profile installation stopped. Resolve these existing-record conflicts first: "+preview.conflicts.map(x=>x.table+" "+x.key+": "+x.reason).join("; "));
   const d=erpKappiyamProfileDefinition_(),created=[],existing=[];
-  function ensure(table,keyField,keyValue,record){
-    const check=erpKappiyamProfileRecord_(table,{[keyField]:keyValue},keyValue,record);
+  function ensure(table,matchFields,keyValue,record){
+    const check=erpKappiyamProfileRecord_(table,matchFields,keyValue,record);
     if(check.action==="conflict")throw new Error("Profile record changed during installation: "+table+" "+keyValue);
     if(check.action==="exists"){existing.push(table+":"+keyValue);return check.record;}
     const saved=erpSave(table,record,"kappiyam-profile-v1:"+table+":"+keyValue);
     created.push(table+":"+keyValue);
     return saved.record;
   }
-  const organization=ensure(d.organization.table,d.organization.keyField,d.organization.keyValue,d.organization.record);
-  const farm=ensure(d.farm.table,d.farm.keyField,d.farm.keyValue,Object.assign({},d.farm.record,{organization_id:organization.organization_id}));
-  const site=ensure(d.site.table,d.site.keyField,d.site.keyValue,Object.assign({},d.site.record,{farm_id:farm.farm_id}));
+  const organization=ensure(d.organization.table,{organization_code:d.organization.keyValue},d.organization.keyValue,d.organization.record);
+  const farm=ensure(d.farm.table,{farm_code:d.farm.keyValue},d.farm.keyValue,Object.assign({},d.farm.record,{organization_id:organization.organization_id}));
+  const site=ensure(d.site.table,{farm_id:farm.farm_id,site_code:d.site.keyValue},d.site.keyValue,Object.assign({},d.site.record,{farm_id:farm.farm_id}));
   const fieldRecords={};
-  d.fields.forEach(x=>{fieldRecords[x.code]=ensure("Fields","field_code",x.code,Object.assign({},x.record,{farm_id:farm.farm_id,site_id:site.site_id}));});
+  d.fields.forEach(x=>{fieldRecords[x.code]=ensure("Fields",{farm_id:farm.farm_id,field_code:x.code},x.code,Object.assign({},x.record,{farm_id:farm.farm_id,site_id:site.site_id}));});
   d.plotCodes.forEach(code=>{
     const field=fieldRecords[code.charAt(0)];
-    ensure("Plots","plot_code",code,{farm_id:farm.farm_id,field_id:field.field_id,plot_name:code,plot_code:code,status:"active"});
+    ensure("Plots",{field_id:field.field_id,plot_code:code},code,{farm_id:farm.farm_id,field_id:field.field_id,plot_name:code,plot_code:code,status:"active"});
   });
-  ensure(d.infrastructure.table,d.infrastructure.keyField,d.infrastructure.keyValue,
+  ensure(d.infrastructure.table,{farm_id:farm.farm_id,code:d.infrastructure.keyValue},d.infrastructure.keyValue,
     Object.assign({},d.infrastructure.record,{farm_id:farm.farm_id,site_id:site.site_id,field_id:fieldRecords.B.field_id}));
   const verified=erpPreviewKappiyamFarmProfile();
   if(!verified.ok||verified.toCreate)throw new Error("Kappiyam profile installation did not verify cleanly.");
