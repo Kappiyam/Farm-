@@ -222,6 +222,74 @@ context.erpRecordTaskExecution(task.task_id,execution,"execution-once");
 assert(rows("TaskExecution").filter(x=>x.task_id===task.task_id).length===1,"Execution replay must not create duplicate actuals.");
 assert(rows("Tasks").find(x=>x.task_id===task.task_id).status==="in_progress","Recorded actual work should move the task to in progress.");
 
+// Demand-to-production planning nets approved supply and saveable stock before sizing new production.
+const planCrop=save("Crops",{crop_name:"Planning test crop",crop_category:"vegetable",default_unit:"kg",status:"active"});
+const planVariety=save("Varieties",{crop_id:planCrop.crop_id,variety_name:"Planning test variety",
+  propagation_method:"direct_seed",duration_days:90,spacing_row:5,spacing_plant:2.5,spacing_unit:"ft",
+  expected_yield:100,yield_unit:"kg",yield_basis:"per_area",yield_area_unit:"acre",status:"active"});
+const planProfile=save("CropProfiles",{crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  production_system:"open_field",propagation_method:"direct_seed",duration_days:90,germination_rate:0.8,
+  survival_rate:0.9,expected_yield:100,yield_unit:"kg",yield_basis:"per_area",yield_area_unit:"acre",
+  assumption_basis:"farm_history",resource_rates_json:JSON.stringify({
+    loss_allowance_rate:0.1,
+    compost_rate_per_area:{quantity:2,unit:"tonne",area_unit:"acre"},
+    seed_lead_days:7,compost_lead_days:14
+  }),status:"active"});
+const planProduct=save("Products",{product_name:"Planning crop produce",crop_id:planCrop.crop_id,
+  variety_id:planVariety.variety_id,base_unit:"kg",status:"active"});
+const planStockLot=save("ProduceLots",{farm_id:farm1.farm_id,crop_id:planCrop.crop_id,
+  variety_id:planVariety.variety_id,lot_code:"PLAN-STOCK-01",quantity_available:15,unit:"kg",status:"active"});
+const planCustomer=save("Customers",{customer_name:"Planning buyer",phone:"9000000099",status:"active"});
+const planOrder=save("SalesOrders",{farm_id:farm1.farm_id,customer_id:planCustomer.customer_id,
+  order_date:"2026-11-16",required_date:"2026-12-05",order_number:"SO-PLAN-01",
+  currency_code:"INR",status:"confirmed"});
+save("SalesOrderLines",{sales_order_id:planOrder.sales_order_id,product_id:planProduct.product_id,
+  produce_lot_id:planStockLot.produce_lot_id,quantity_ordered:5,quantity_fulfilled:0,unit:"kg",grade:""});
+save("DemandRecords",{farm_id:farm1.farm_id,crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  demand_type:"confirmed",quantity:245,unit:"kg",required_date:"2026-12-06",status:"active"});
+save("DemandRecords",{farm_id:farm1.farm_id,crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  demand_type:"confirmed",quantity:5,unit:"kg",required_date:"2026-12-06",
+  source_reference:planOrder.sales_order_id,status:"active"});
+save("DemandRecords",{farm_id:farm1.farm_id,crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  demand_type:"forecast",quantity:50,unit:"kg",period_start:"2026-12-01",period_end:"2026-12-31",status:"active"});
+const approvedSupplyCycle=save("CropCycles",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,
+  plot_id:loc1.plot.plot_id,crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  cycle_name:"Approved existing production",production_system:"open_field",start_date:"2026-10-01",
+  expected_end_date:"2026-12-01",area_value:2,area_unit:"acre",plant_count:5000,status:"active"});
+const draftSupplyCycle=save("CropCycles",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,
+  plot_id:loc1.plot.plot_id,crop_id:planCrop.crop_id,variety_id:planVariety.variety_id,
+  cycle_name:"Unapproved proposal",production_system:"open_field",start_date:"2026-10-01",
+  expected_end_date:"2026-12-01",area_value:10,area_unit:"acre",plant_count:25000,status:"draft"});
+const planHarvest=save("HarvestSessions",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,
+  plot_id:loc1.plot.plot_id,crop_cycle_id:approvedSupplyCycle.crop_cycle_id,
+  harvest_date:"2026-11-10",status:"finalised"});
+save("HarvestLines",{harvest_id:planHarvest.harvest_id,crop_id:planCrop.crop_id,
+  variety_id:planVariety.variety_id,quantity:40,unit:"kg",grade:"",disposition:"saleable"});
+const planResult=context.erpCalculateProductionGap(farm1.farm_id,"2026-12-01","2026-12-31");
+const planRow=planResult.rows.find(x=>x.crop_id===planCrop.crop_id&&x.variety_id===planVariety.variety_id);
+assert(!!planRow,"Demand planner should return the crop/variety demand bucket.");
+assert(Number(planRow.confirmed_demand)===250,"Confirmed sales orders plus manual demand should be counted once.");
+assert(Number(planRow.forecast_demand)===50,"Forecast demand should remain separate from confirmed demand.");
+assert(Number(planRow.available_stock)===10,"Allocated stock must be deducted from saleable produce stock.");
+assert(Number(planRow.projected_crop_supply)===160,"Only established crop cycles count as supply and harvest-to-date is deducted.");
+assert(!planRow.supply_basis.some(x=>x.indexOf("Unapproved proposal")>=0),"Draft crop cycles must never count as committed supply.");
+assert(Number(planRow.additional_production_required)===130,"New production must cover the net gap after current stock and crop supply.");
+assert(Math.abs(Number(planRow.gross_production_required)-144.4444444444)<0.001,"Gross production must include the configured 10% loss allowance.");
+assert(Math.abs(Number(planRow.required_cultivation_area)-1.4444444444)<0.001,"Area must use the configured per-acre yield basis.");
+assert(Number(planRow.required_plant_count)>0&&Number(planRow.required_seed_quantity)>0,"Direct-seeded crop planning should size plants and seed using spacing, germination and survival.");
+assert(Math.abs(Number(planRow.required_compost_quantity)-2.8888888889)<0.001,"Compost readiness quantity should use the configured per-area rate.");
+assert(planRow.latest_safe_planting_date&&planRow.seed_procurement_by&&planRow.compost_ready_by,"Backward readiness dates should be calculated from the harvest target.");
+assert(planRow.confidence==="high","Farm-history crop assumptions should be identified as high-confidence supply.");
+const forecastVersion=context.erpCreateForecastVersion(farm1.farm_id,"2026-12-01","2026-12-31","forecast-version-once");
+const forecastVersionReplay=context.erpCreateForecastVersion(farm1.farm_id,"2026-12-01","2026-12-31","forecast-version-once");
+assert(forecastVersionReplay.duplicate===true,"Forecast-version requests should be safely replayable.");
+assert(rows("ForecastVersions").filter(x=>x.farm_id===farm1.farm_id&&x.period_start==="2026-12-01").length===1,
+  "Repeated forecast-version saves must not create duplicate snapshots.");
+const savedCoverage=JSON.parse(forecastVersion.forecastVersion.coverage_json);
+assert(savedCoverage.result_snapshot.rows.some(x=>x.crop_id===planCrop.crop_id&&x.additional_production_required===130),
+  "Forecast versions should retain the full calculated result snapshot.");
+
+// Calendar overrides and tasks created from events must be repeat-safe.
 // Calendar overrides and tasks created from events must be repeat-safe.
 const event=save("CalendarEvents",{farm_id:farm1.farm_id,title:"Irrigation inspection",event_type:"irrigation",
   start_at:"2026-11-15T08:00:00.000Z",recurrence_type:"daily",recurrence_interval:1,recurrence_end:"2026-11-17",
