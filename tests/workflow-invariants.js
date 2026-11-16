@@ -326,6 +326,41 @@ assert(harvestTask.task.sales_order_id===secondPlanOrder.sales_order_id&&harvest
 assert(harvestTask.task.status==="planned"&&!harvestTask.duplicate&&harvestTaskReplay.duplicate,
   "Order-driven harvest task creation should be unassigned, planned and idempotent.");
 
+// A published day plan records the selected tasks, supports audited deferral and split, and closes with actuals.
+context.erpAssignTask(planTask.task_id,[{person_id:worker1.person_id,assignment_role:"assignee"}],"day-plan-assignment-once");
+const savedDayPlan=context.erpSaveDailyWorkPlan(farm1.farm_id,"2026-12-05",
+  [planTask.task_id,harvestTask.task.task_id],"Morning briefing and harvest priority","day-plan-save-once");
+const savedDayPlanReplay=context.erpSaveDailyWorkPlan(farm1.farm_id,"2026-12-05",
+  [planTask.task_id,harvestTask.task.task_id],"Morning briefing and harvest priority","day-plan-save-once");
+assert(savedDayPlan.plan.status==="draft"&&savedDayPlan.items.length===2,"Saving a day plan should create a draft with task snapshots.");
+assert(savedDayPlanReplay.plan.plan_id===savedDayPlan.plan.plan_id,"Day-plan save replay should retain the same plan ID.");
+const publishDayPlan=context.erpPublishDailyWorkPlan(savedDayPlan.plan.plan_id,"day-plan-publish-once");
+assert(publishDayPlan.plan.status==="published"&&publishDayPlan.itemCount===2,
+  "Manager publish should commit the selected day-plan items.");
+assert(publishDayPlan.highPriorityUnassignedCount===1,
+  "Publishing should flag high-priority order harvest work that has not yet been assigned.");
+const maintenancePlanItem=savedDayPlan.items.find(x=>x.task_id===planTask.task_id);
+const harvestPlanItem=savedDayPlan.items.find(x=>x.task_id===harvestTask.task.task_id);
+const deferred=context.erpDeferDailyWorkPlanItem(maintenancePlanItem.plan_item_id,"2026-12-06",
+  "Rain delay; reschedule after field access","day-plan-defer-once");
+assert(deferred.item.status==="deferred"&&deferred.assignmentsPreserved,
+  "Deferring work must require a reason and preserve the existing assignment.");
+assert(rows("TaskAssignments").some(x=>x.task_id===planTask.task_id&&x.person_id===worker1.person_id&&x.status!=="removed"),
+  "Deferral must not delete the original worker assignment.");
+const split=context.erpSplitDailyWorkPlanItem(harvestPlanItem.plan_item_id,1,"day-plan-split-once");
+assert(Number(split.originalTask.required_quantity)===1&&Number(split.newTask.required_quantity)===1,
+  "Task splitting should conserve the original required quantity.");
+assert(split.newTaskAssigned===false,"A split task should remain unassigned until the manager allocates it.");
+assert(Number(rows("DailyWorkPlanItems").find(x=>x.plan_item_id===harvestPlanItem.plan_item_id).required_quantity)===1,
+  "The saved plan-item quantity must reconcile to the reduced original task quantity.");
+const dayPlanClose=context.erpCloseDailyWorkPlan(savedDayPlan.plan.plan_id,"Field work reviewed; deferred work carried forward.","day-plan-close-once");
+const dayPlanCloseReplay=context.erpCloseDailyWorkPlan(savedDayPlan.plan.plan_id,"Field work reviewed; deferred work carried forward.","day-plan-close-once");
+assert(dayPlanClose.plan.status==="closed"&&dayPlanClose.closeout.counts.deferred===1,
+  "End-of-day close-out should retain deferred exceptions and a structured execution snapshot.");
+assert(dayPlanCloseReplay.duplicate===true,"Closed day-plan close-out should be safe to replay.");
+assert(rows("DailyWorkPlanChanges").filter(x=>x.plan_id===savedDayPlan.plan.plan_id).length>=5,
+  "Day-plan publication, deferral, split and close-out should append an audit trail.");
+
 // Calendar overrides and tasks created from events must be repeat-safe.
 // Calendar overrides and tasks created from events must be repeat-safe.
 const event=save("CalendarEvents",{farm_id:farm1.farm_id,title:"Irrigation inspection",event_type:"irrigation",
