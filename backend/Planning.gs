@@ -227,8 +227,10 @@ function erpProductionRequirements_(row,profile,variety,startDate){
     }
   }
   const propagation=String(profile&&profile.propagation_method||variety&&variety.propagation_method||"").toLowerCase();
-  const germination=Math.min(1,Math.max(0,Number(profile&&profile.germination_rate)||1));
-  const survival=Math.min(1,Math.max(0,Number(profile&&profile.survival_rate)||1));
+  const germinationRaw=profile&&profile.germination_rate!==""&&profile.germination_rate!==undefined?Number(profile.germination_rate):1;
+  const survivalRaw=profile&&profile.survival_rate!==""&&profile.survival_rate!==undefined?Number(profile.survival_rate):1;
+  const germination=Math.min(1,Math.max(0,germinationRaw>1?germinationRaw/100:germinationRaw));
+  const survival=Math.min(1,Math.max(0,survivalRaw>1?survivalRaw/100:survivalRaw));
   if(plants!==null){
     const fieldEstablishment=Math.max(0,survival);
     if(/direct|seed/.test(propagation)&&!/nursery|transplant/.test(propagation)){
@@ -257,7 +259,8 @@ function erpProductionRequirements_(row,profile,variety,startDate){
   const nurseryDays=Number(profile&&profile.nursery_days||0);
   const targetDate=startDate||"";
   const plantingDate=duration>0&&targetDate?erpAddDays_(targetDate,-duration):"";
-  const nurseryDate=plantingDate&&nurseryDays>0?erpAddDays_(plantingDate,-nurseryDays):"";
+  const nurseryRoute=/nursery|transplant/.test(String(profile&&profile.propagation_method||variety&&variety.propagation_method||"").toLowerCase());
+  const nurseryDate=nurseryRoute&&plantingDate&&nurseryDays>0?erpAddDays_(plantingDate,-nurseryDays):"";
   const seedLead=Number(rates.seed_lead_days||0),compostLead=Number(rates.compost_lead_days||0);
   return {
     gross_production_required:gross,loss_allowance_rate:loss,
