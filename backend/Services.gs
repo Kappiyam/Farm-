@@ -160,7 +160,7 @@ const ERP_REQUIRED = Object.freeze({
   CostAllocations:["finance_entry_id","farm_id","allocation_basis","allocated_amount"],Assets:["farm_id","asset_name"],
   AssetUsage:["asset_id","usage_date"],Maintenance:["asset_id","maintenance_type","scheduled_date"],
   CalendarEvents:["farm_id","title","start_at"],CalendarEventOverrides:["event_id","occurrence_start","action"],CalendarEventOccurrences:["event_id","occurrence_start","title"],ActivityJournal:["farm_id","occurred_at","title"],
-  DemandRecords:["farm_id","demand_type","quantity","required_date"],ForecastVersions:["farm_id","version_date"],
+  DemandRecords:["farm_id","demand_type","quantity"],ForecastVersions:["farm_id","version_date"],
   EventParticipants:["event_id","person_id"]
 });
 
@@ -361,6 +361,13 @@ function erpSetCalculatedField_(table,id,field,value,reason){
 }
 
 function erpValidateRecord_(table,record,id){
+  if(table==="DemandRecords"){
+    const hasSingleDate=!!String(record.required_date||"").trim();
+    const hasPeriod=!!String(record.period_start||"").trim()&&!!String(record.period_end||"").trim();
+    if(!hasSingleDate&&!hasPeriod)throw new Error("Demand requires a required date or a complete period start and end.");
+    if(record.period_start&&record.period_end&&erpDateKey_(record.period_end)<erpDateKey_(record.period_start))
+      throw new Error("Demand period end must not be before its start.");
+  }
   (ERP_REQUIRED[table]||[]).forEach(field=>{
     if(record[field]===undefined||record[field]===null||String(record[field]).trim()===""){
       throw new Error("Required field: "+field);
