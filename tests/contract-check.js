@@ -56,6 +56,7 @@ check(app.includes(".planner-desktop{display:none!important}")&&app.includes(".p
 check(app.includes("data-plan-task-mobile")&&app.includes("host.querySelectorAll(\"[data-plan-task], [data-plan-task-mobile]\")"),"Daily plan task selection must remain available and synchronised on mobile.");
 check(app.includes("data-plan-harvest")&&app.includes("data-plan-defer")&&app.includes("data-plan-split"),"Daily plan order, deferral and split actions must remain present in the responsive UI.");
 check(app.includes("preview-kappiyam-profile")&&app.includes("install-kappiyam-profile"),"Farm Structure must expose the Kappiyam profile preview and explicit installation controls.");
+check(app.includes('value="system-health"')&&app.includes('["integrity","system-health"]'),"Reports must expose the read-only database health scan without date filters.");
 const calls=findCalls(app);
 const called=new Set(calls.map(c=>c.name));
 for(const name of called) check(declared.has(name),"Frontend calls missing backend function: "+name);
