@@ -292,6 +292,40 @@ const savedCoverage=JSON.parse(forecastVersion.forecastVersion.coverage_json);
 assert(savedCoverage.result_snapshot.rows.some(x=>x.crop_id===planCrop.crop_id&&x.additional_production_required===130),
   "Forecast versions should retain the full calculated result snapshot.");
 
+// Daily Work Planner consolidates tasks, unlinked scouting actions, order demand and attendance.
+const planTask=save("Tasks",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,plot_id:loc1.plot.plot_id,
+  crop_cycle_id:approvedSupplyCycle.crop_cycle_id,title:"Scheduled crop maintenance",task_type:"crop_operation",
+  priority:"normal",status:"planned",planned_start:"2026-12-05",due_at:"2026-12-05",
+  estimated_duration_minutes:60});
+const planObservation=save("Observations",{farm_id:farm1.farm_id,field_id:loc1.field.field_id,
+  plot_id:loc1.plot.plot_id,crop_cycle_id:approvedSupplyCycle.crop_cycle_id,
+  observed_at:"2026-12-05T08:00:00.000Z",category:"pest_presence",severity:"high",
+  quick_status:"action_required",description:"Fresh scouting observation"});
+save("Attendance",{farm_id:farm1.farm_id,person_id:worker1.person_id,work_date:"2026-12-05",
+  attendance_status:"present",total_minutes:480});
+save("Attendance",{farm_id:farm1.farm_id,person_id:worker2.person_id,work_date:"2026-12-05",
+  attendance_status:"absent",total_minutes:0});
+const secondPlanOrder=save("SalesOrders",{farm_id:farm1.farm_id,customer_id:planCustomer.customer_id,
+  order_date:"2026-11-16",required_date:"2026-12-05",order_number:"SO-PLAN-02",
+  currency_code:"INR",status:"confirmed"});
+const secondPlanLine=save("SalesOrderLines",{sales_order_id:secondPlanOrder.sales_order_id,
+  product_id:planProduct.product_id,quantity_ordered:12,quantity_fulfilled:0,unit:"kg",grade:""});
+const dayPlan=context.erpGetDailyWorkPlanner(farm1.farm_id,"2026-12-05");
+assert(dayPlan.sources.scheduled_tasks.some(x=>x.task_id===planTask.task_id),"Daily planner should include scheduled crop tasks.");
+assert(dayPlan.sources.scouting_actions.some(x=>x.observation_id===planObservation.observation_id),"Daily planner should surface unlinked scouting actions.");
+const plannerOrder=dayPlan.sources.order_harvest_requirements.find(x=>x.source_line_id===secondPlanLine.sales_line_id);
+assert(!!plannerOrder,"Daily planner should include open confirmed order lines for the selected day.");
+assert(Number(plannerOrder.unallocated_stock_applied)===10&&Number(plannerOrder.estimated_harvest_gap)===2,
+  "Daily planner should allocate shared unreserved saleable stock only once across order requirements.");
+assert(dayPlan.workforce.available_count===1&&dayPlan.workforce.unavailable_count===1,
+  "Daily planner should reflect recorded attendance without assuming unrecorded workers are present.");
+const harvestTask=context.erpCreateTaskFromSalesOrderLine(secondPlanLine.sales_line_id,2,"planner-order-task-once");
+const harvestTaskReplay=context.erpCreateTaskFromSalesOrderLine(secondPlanLine.sales_line_id,2,"planner-order-task-once");
+assert(harvestTask.task.sales_order_id===secondPlanOrder.sales_order_id&&harvestTask.task.sales_line_id===secondPlanLine.sales_line_id,
+  "Order-driven harvest tasks must retain the source order and line IDs.");
+assert(harvestTask.task.status==="planned"&&!harvestTask.duplicate&&harvestTaskReplay.duplicate,
+  "Order-driven harvest task creation should be unassigned, planned and idempotent.");
+
 // Calendar overrides and tasks created from events must be repeat-safe.
 // Calendar overrides and tasks created from events must be repeat-safe.
 const event=save("CalendarEvents",{farm_id:farm1.farm_id,title:"Irrigation inspection",event_type:"irrigation",
