@@ -390,7 +390,7 @@ function erpValidateRecord_(table,record,id){
   Object.keys(record).forEach(field=>{
     const value=record[field];
     if(value===""||value===null||value===undefined)return;
-    if(!/_unit$/i.test(field)&&/(^|_)(quantity|amount|cost|price|rate|area|duration|minutes|hours|volume|percent|spacing|days|count|balance|threshold|factor|plant_count|survival|germination|discount|tax|subtotal|total|yield|meter|downtime|contribution|offset|interval|width|length|height)(_|$)/i.test(field)){
+    if(!/_(unit|basis|type|status|method|notes|source|category|code|name)$/i.test(field)&&/(^|_)(quantity|amount|cost|price|rate|area|duration|minutes|hours|volume|percent|spacing|days|count|balance|threshold|factor|plant_count|survival|germination|discount|tax|subtotal|total|yield|meter|downtime|contribution|offset|interval|width|length|height)(_|$)/i.test(field)){
       if(!isFinite(Number(value)))throw new Error(field+" must be numeric.");
       if(/percent|rate|survival|germination|contribution/i.test(field)&&Number(value)<0)throw new Error(field+" cannot be negative.");
     }
