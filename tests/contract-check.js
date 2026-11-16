@@ -61,7 +61,7 @@ const mutationArguments={
   erpCreateInvoiceFromOrder:3,erpRecordCustomerPayment:3,erpAssignTask:3,
   erpRecordTaskExecution:3,erpUpdateTaskStatus:4,erpGenerateCropTasks:2,
   erpCreateTaskFromObservation:5,erpCreateTaskFromCalendarEvent:5,
-  erpCancelCalendarOccurrence:4,erpUpdateCalendarEvent:6,erpCreateForecastVersion:4
+  erpCancelCalendarOccurrence:4,erpUpdateCalendarEvent:6,erpCreateForecastVersion:4,erpCreateTaskFromSalesOrderLine:3
 };
 for(const [name,count] of Object.entries(mutationArguments)){
   const sites=calls.filter(c=>c.name===name);
