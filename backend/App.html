@@ -140,10 +140,12 @@
   if(!tabs.length){$("#content").innerHTML='<div class="empty"><strong>Module unavailable</strong></div>';return;}
   if(!tabs.some(x=>x[1]===state.table))state.table=defaultTable(key);
   renderModuleFrame(m,tabs);
-  if(key==="tasks"&&state.table==="Tasks"&&state.taskLayout==="board")fetchTaskBoard();else fetchRows();
+  if(key==="tasks"){loadDailyWorkPlanner();if(state.table==="Tasks"&&state.taskLayout==="board")fetchTaskBoard();else fetchRows();}else fetchRows();
  }
  function renderModuleFrame(m,tabs){
-  const extra=m.key==="demand"?'<section class="panel planner-panel"><div class="panel-head"><div><h3>Production gap calculator</h3><p>Confirmed demand, forecasts, available produce and projected crop supply remain separately visible.</p></div><span class="tag">Planning tool</span></div><div class="form-grid"><div class="field"><label>Period start</label><input type="date" id="demand-start"></div><div class="field"><label>Period end</label><input type="date" id="demand-end"></div></div><div class="actions" style="margin-top:12px"><button class="btn primary" id="run-demand">Calculate production gap</button></div><div id="demand-results"></div></section>':'';
+  const extra=m.key==="demand"?'<section class="panel planner-panel"><div class="panel-head"><div><h3>Production gap calculator</h3><p>Confirmed demand, forecasts, available produce and projected crop supply remain separately visible.</p></div><span class="tag">Planning tool</span></div><div class="form-grid"><div class="field"><label>Period start</label><input type="date" id="demand-start"></div><div class="field"><label>Period end</label><input type="date" id="demand-end"></div></div><div class="actions" style="margin-top:12px"><button class="btn primary" id="run-demand">Calculate production gap</button></div><div id="demand-results"></div></section>':
+   m.key==="tasks"?'<section class="panel planner-panel" id="daily-work-planner"><div class="panel-head"><div><h3>Daily work planner</h3><p>Scheduled crop work, scouting actions and confirmed order harvest demand in one view. Source records remain separate until a manager creates a task.</p></div><span class="tag">Operations control</span></div><div class="form-grid"><div class="field"><label>Plan date</label><input type="date" id="daily-plan-date"></div><div class="field" style="align-self:end"><button class="btn secondary" id="daily-plan-refresh">Refresh daily plan</button></div></div><div id="daily-plan-results"><div class="empty"><strong>Select a farm</strong><span>Choose a farm in the header to load its daily work queues.</span></div></div></section>':'';
+
   $("#content").innerHTML='<section class="module-intro"><div><div class="crumb">FARMERP / '+esc(m.group.toUpperCase())+'</div><h2>'+esc(m.label)+'</h2><p>'+esc(m.desc)+'</p></div><span class="symbol">'+m.icon+'</span></section>'+extra+(m.key==="tasks"?'<div class="toolbar"><div class="view-switch"><button class="btn '+(state.taskLayout==="board"?"primary":"secondary")+'" data-task-layout="board">Board</button><button class="btn '+(state.taskLayout==="list"?"primary":"secondary")+'" data-task-layout="list">List</button></div><span class="notice">Assignments, task status and actual execution are separate records.</span></div>':"")+'<div class="tabs">'+tabs.map(x=>'<button class="tab '+(state.table===x[1]?"active":"")+'" data-table="'+esc(x[1])+'">'+esc(x[0])+'</button>').join("")+'</div><div class="toolbar"><div class="search"><span>⌕</span><input id="record-search" placeholder="'+t("search")+'" value="'+esc(state.search)+'"></div><div class="toolbar-right"><button class="btn secondary" id="export-btn">↓ '+t("export")+'</button><button class="btn primary" id="new-btn">＋ '+t("new")+'</button></div></div><article class="panel data-panel"><div class="panel-head"><div><h3 id="table-title">'+esc(tabs.find(x=>x[1]===state.table)[0])+'</h3><p id="record-count">Loading records…</p></div><span class="tag">'+(ledgerTables.has(state.table)?"Append-only transaction":"Managed records")+'</span></div><div class="task-board hidden" id="task-board"></div><div class="table-wrap" id="table-wrap"></div><div class="mobile-records" id="mobile-records"></div><div class="table-foot"><span id="page-info"></span><div><button class="btn ghost" id="prev-page">Previous</button><button class="btn ghost" id="next-page">Next</button></div></div></article>';
   $("#content").querySelectorAll("[data-task-layout]").forEach(b=>b.onclick=()=>{state.taskLayout=b.dataset.taskLayout;loadModule("tasks");});
   $("#content").querySelectorAll("[data-table]").forEach(b=>b.onclick=()=>{state.table=b.dataset.table;state.offset=0;state.search="";loadModule(state.view);});
@@ -157,6 +159,53 @@
     $("#demand-start").value=now.toISOString().slice(0,10);$("#demand-end").value=future.toISOString().slice(0,10);
     $("#run-demand").onclick=runDemandPlanner;
   }
+  if(m.key==="tasks"){
+    const now=new Date(),local=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
+    $("#daily-plan-date").value=local;
+    $("#daily-plan-refresh").onclick=loadDailyWorkPlanner;
+    $("#daily-plan-date").onchange=loadDailyWorkPlanner;
+  }
+ }
+ async function loadDailyWorkPlanner(){
+  const host=$("#daily-plan-results"),date=$("#daily-plan-date")&&$("#daily-plan-date").value;
+  if(!host)return;
+  if(!state.farmId){host.innerHTML='<div class="empty"><strong>Select a farm</strong><span>The daily planner requires a specific farm context.</span></div>';return;}
+  host.innerHTML='<div class="loading">Consolidating the day plan…</div>';
+  try{
+   const result=await call("erpGetDailyWorkPlanner",state.farmId,date);
+   state.dailyWorkPlanner=result;renderDailyWorkPlanner();
+  }catch(e){host.innerHTML='<div class="error">'+esc(e.message)+'</div>';}
+ }
+ function renderDailyWorkPlanner(){
+  const result=state.dailyWorkPlanner,host=$("#daily-plan-results");if(!result||!host)return;
+  const summary=result.summary||{},sources=result.sources||{},workers=result.workforce&&result.workforce.workers||[];
+  const metrics=[["Scheduled tasks",summary.scheduled_tasks||0],["Unassigned",summary.unassigned_tasks||0],
+    ["Scouting actions",summary.scouting_actions||0],["Order lines",summary.order_lines||0],
+    ["Harvest gap",Number(summary.harvest_gap_quantity||0).toLocaleString()],
+    ["Estimated person-hours",(Number(summary.estimated_person_minutes||0)/60).toFixed(1)]];
+  const metricHtml='<div class="metric-grid">'+metrics.map(([label,value])=>'<article class="metric"><div class="metric-top">'+esc(label)+'</div><strong>'+esc(value)+'</strong></article>').join("")+'</div>';
+  const taskRows=(sources.scheduled_tasks||[]).map(t=>'<tr><td><strong>'+esc(t.title)+'</strong><br><small>'+esc(t.plot_id||t.field_id||"Farm-wide")+'</small></td><td>'+esc(t.priority)+'</td><td>'+esc(t.status)+'</td><td>'+esc(t.assignees.map(x=>x.name).join(", ")||"Unassigned")+'</td><td>'+esc(Number(t.actual.minutes||0))+' min</td><td><button class="btn secondary" data-plan-assign="'+esc(t.task_id)+'">Assign</button></td></tr>').join("");
+  const taskHtml='<article class="panel"><div class="panel-head"><div><h3>Scheduled crop and manual tasks</h3><p>Planned minutes: '+esc(summary.planned_minutes||0)+' · Tasks with actuals: '+esc(summary.tasks_with_actuals||0)+'</p></div></div>'+(taskRows?'<div class="table-wrap"><table><thead><tr><th>Task / location</th><th>Priority</th><th>Status</th><th>Workers</th><th>Actual</th><th></th></tr></thead><tbody>'+taskRows+'</tbody></table></div>':'<div class="empty"><strong>No scheduled tasks for this date</strong><span>Crop schedules and manual tasks due on this date appear here.</span></div>')+'</article>';
+  const observationRows=(sources.scouting_actions||[]).map(o=>'<article class="dash-row"><div><strong>'+esc(o.category||"Scouting observation")+'</strong><span>'+esc([o.field_name,o.plot_name,o.crop_name].filter(Boolean).join(" · ")||o.plot_id||"Location not specified")+'</span><small>'+esc(o.description||"No observation notes")+'</small></div><div><span class="status '+statusClass(o.priority)+'">'+esc(o.priority)+'</span><button class="btn secondary" data-plan-observation="'+esc(o.observation_id)+'">Create follow-up task</button></div></article>').join("");
+  const observationHtml='<article class="panel"><div class="panel-head"><div><h3>Scouting actions</h3><p>Unlinked observations recorded on '+esc(result.planDate)+'. An observation is not treated as a diagnosis or completed task.</p></div></div>'+(observationRows||'<div class="empty"><strong>No unlinked observations for this date</strong></div>')+'</article>';
+  const orderRows=(sources.order_harvest_requirements||[]).map(o=>'<tr><td><strong>'+esc(o.order_number)+'</strong><br><small>'+esc(o.customer_name)+'</small></td><td>'+esc(o.crop_name||o.product_name)+(o.variety_name?" · "+esc(o.variety_name):"")+'</td><td>'+esc(o.grade||"—")+'</td><td>'+esc(o.remaining_quantity)+' '+esc(o.unit)+'</td><td>'+esc(o.stock_reserved_for_order+o.unallocated_stock_applied)+' '+esc(o.unit)+'</td><td><strong>'+esc(o.estimated_harvest_gap)+' '+esc(o.unit)+'</strong></td><td>'+(o.estimated_harvest_gap>0?'<button class="btn secondary" data-plan-harvest="'+esc(o.source_line_id)+'" data-quantity="'+esc(o.estimated_harvest_gap)+'">Create harvest task</button>':'<span class="tag">Stock covered</span>')+'</td></tr>').join("");
+  const orderHtml='<article class="panel"><div class="panel-head"><div><h3>Confirmed order harvest requirements</h3><p>Required quantity net of reserved and unallocated saleable stock for this farm and date.</p></div></div>'+(orderRows?'<div class="table-wrap"><table><thead><tr><th>Order / buyer</th><th>Crop / product</th><th>Grade</th><th>Remaining</th><th>Stock coverage</th><th>Harvest gap</th><th></th></tr></thead><tbody>'+orderRows+'</tbody></table></div>':'<div class="empty"><strong>No confirmed order requirements due this date</strong></div>')+'</article>';
+  const workerRows=workers.map(w=>'<div class="dash-row"><div><strong>'+esc(w.name)+'</strong><span>'+esc(w.teams.join(", ")||"No team")+'</span></div><span class="status '+statusClass(w.availability)+'">'+esc(w.availability.replace(/_/g," "))+'</span></div>').join("");
+  const workerHtml='<article class="panel"><div class="panel-head"><div><h3>Worker availability</h3><p>'+esc(result.workforce.available_count)+' recorded available · '+esc(result.workforce.unavailable_count)+' unavailable · '+esc(result.workforce.attendance_unrecorded_count)+' not recorded</p></div></div>'+(workerRows||'<div class="empty">No active workers in this farm.</div>')+'</article>';
+  host.innerHTML=metricHtml+taskHtml+observationHtml+orderHtml+workerHtml+'<div class="notice">'+esc((result.notes||[]).join(" "))+'</div>';
+  host.querySelectorAll("[data-plan-assign]").forEach(b=>b.onclick=()=>openTaskAssignmentDialog(b.dataset.planAssign));
+  host.querySelectorAll("[data-plan-observation]").forEach(b=>b.onclick=()=>openObservationFollowUp(b.dataset.planObservation));
+  host.querySelectorAll("[data-plan-harvest]").forEach(b=>b.onclick=async()=>{
+   const lineId=b.dataset.planHarvest,quantity=Number(b.dataset.quantity),planDate=result.planDate;
+   b.disabled=true;b.textContent="Creating…";
+   const key="daily-order-harvest:"+lineId+":"+planDate+":"+quantity;
+   try{
+    const done=await call("erpCreateTaskFromSalesOrderLine",lineId,quantity,key);
+    toast(done.duplicate?"Harvest task already created":"Unassigned harvest task created");
+    loadDailyWorkPlanner();
+    if(state.table==="Tasks")fetchRows();
+   }catch(e){toast(e.message,true);b.disabled=false;b.textContent="Create harvest task";}
+  });
  }
  async function fetchTaskBoard(){
   $("#table-wrap").classList.add("hidden");$("#mobile-records").classList.add("hidden");
