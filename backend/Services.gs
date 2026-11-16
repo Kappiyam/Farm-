@@ -226,9 +226,9 @@ function erpInstallSchema(){
  * editable master records. No areas, soil values, pump groups or physical
  * valve labels are invented where the project data has not supplied them.
  */
-function erpKappiyamProfileRecord_(table,keyField,keyValue,record){
+function erpKappiyamProfileRecord_(table,matchFields,keyValue,record){
   const rows=erpRead_(table,{limit:1000}).rows;
-  const matches=rows.filter(r=>String(r[keyField]||"").trim().toLowerCase()===String(keyValue).trim().toLowerCase());
+  const matches=rows.filter(r=>Object.keys(matchFields).every(k=>String(r[k]||"").trim().toLowerCase()===String(matchFields[k]).trim().toLowerCase()));
   if(matches.length>1)return {action:"conflict",table:table,key:keyValue,reason:"More than one matching code exists.",matches:matches.length};
   if(matches.length===1){
     const existing=matches[0],key=ERP_KEYS[table];
@@ -263,27 +263,27 @@ function erpKappiyamProfileDefinition_(){
 /** Read-only preview for the known 31-plot Kappiyam reference profile. */
 function erpPreviewKappiyamFarmProfile(){
   const d=erpKappiyamProfileDefinition_();
-  const org=erpKappiyamProfileRecord_(d.organization.table,d.organization.keyField,d.organization.keyValue,d.organization.record);
+  const org=erpKappiyamProfileRecord_(d.organization.table,{organization_code:d.organization.keyValue},d.organization.keyValue,d.organization.record);
   const farmRecord=Object.assign({},d.farm.record,{organization_id:org.id||"<created during install>"});
-  const farm=erpKappiyamProfileRecord_(d.farm.table,d.farm.keyField,d.farm.keyValue,farmRecord);
+  const farm=erpKappiyamProfileRecord_(d.farm.table,{farm_code:d.farm.keyValue},d.farm.keyValue,farmRecord);
   const farmId=farm.id||"<created during install>";
   const siteRecord=Object.assign({},d.site.record,{farm_id:farmId});
-  const site=erpKappiyamProfileRecord_(d.site.table,d.site.keyField,d.site.keyValue,siteRecord);
+  const site=erpKappiyamProfileRecord_(d.site.table,{farm_id:farmId,site_code:d.site.keyValue},d.site.keyValue,siteRecord);
   const siteId=site.id||"<created during install>";
   const fields=d.fields.map(x=>{
     const record=Object.assign({},x.record,{farm_id:farmId,site_id:siteId});
-    return Object.assign({code:x.code},erpKappiyamProfileRecord_("Fields","field_code",x.code,record));
+    return Object.assign({code:x.code},erpKappiyamProfileRecord_("Fields",{farm_id:farmId,field_code:x.code},x.code,record));
   });
   const fieldByCode={};
   fields.forEach(x=>{if(x.id)fieldByCode[x.code]=x.id;});
   const plots=d.plotCodes.map(code=>{
     const fieldCode=code.charAt(0),fieldId=fieldByCode[fieldCode]||("<field "+fieldCode+" created during install>");
     const record={farm_id:farmId,field_id:fieldId,plot_name:code,plot_code:code,status:"active"};
-    return Object.assign({code:code},erpKappiyamProfileRecord_("Plots","plot_code",code,record));
+    return Object.assign({code:code},erpKappiyamProfileRecord_("Plots",{field_id:fieldId,plot_code:code},code,record));
   });
   const fieldB=fieldByCode.B||"<field B created during install>";
   const infraRecord=Object.assign({},d.infrastructure.record,{farm_id:farmId,site_id:siteId,field_id:fieldB});
-  const infrastructure=erpKappiyamProfileRecord_(d.infrastructure.table,d.infrastructure.keyField,d.infrastructure.keyValue,infraRecord);
+  const infrastructure=erpKappiyamProfileRecord_(d.infrastructure.table,{farm_id:farmId,code:d.infrastructure.keyValue},d.infrastructure.keyValue,infraRecord);
   const records=[org,farm,site].concat(fields,plots,[infrastructure]);
   const conflicts=records.filter(x=>x.action==="conflict");
   return {ok:conflicts.length===0,readOnly:true,profile:"Kappiyam Organic Farm",
@@ -304,7 +304,7 @@ function erpInstallKappiyamFarmProfile(){
   if(!preview.ok)throw new Error("Kappiyam profile installation stopped. Resolve these existing-record conflicts first: "+preview.conflicts.map(x=>x.table+" "+x.key+": "+x.reason).join("; "));
   const d=erpKappiyamProfileDefinition_(),created=[],existing=[];
   function ensure(table,keyField,keyValue,record){
-    const check=erpKappiyamProfileRecord_(table,keyField,keyValue,record);
+    const check=erpKappiyamProfileRecord_(table,{[keyField]:keyValue},keyValue,record);
     if(check.action==="conflict")throw new Error("Profile record changed during installation: "+table+" "+keyValue);
     if(check.action==="exists"){existing.push(table+":"+keyValue);return check.record;}
     const saved=erpSave(table,record,"kappiyam-profile-v1:"+table+":"+keyValue);
