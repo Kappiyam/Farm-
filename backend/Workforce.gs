@@ -506,6 +506,7 @@ function erpSplitDailyWorkPlanItem(planItemId,splitQuantity,requestKey){
     throw new Error("Split quantity must be positive and smaller than the task's remaining required quantity.");
   const before={task:original,item:item};
   const updated=erpSave("Tasks",{task_id:original.task_id,required_quantity:total-split},requestKey+":original");
+  const updatedItem=erpSave("DailyWorkPlanItems",{plan_item_id:planItemId,required_quantity:total-split},requestKey+":original-item");
   const copy=Object.assign({},original);
   ["task_id","created_at","updated_at","status_history"].forEach(k=>delete copy[k]);
   copy.title=(original.title||"Task")+" (split)";
@@ -520,7 +521,7 @@ function erpSplitDailyWorkPlanItem(planItemId,splitQuantity,requestKey){
     assignment_snapshot_json:"[]",status:"included",manager_notes:"Split from "+original.task_id,created_by:erpActor_()
   },requestKey+":plan-item");
   erpDailyPlanChange_(plan.plan_id,planItemId,"split","Task split into two work quantities.",before,
-    {originalTask:updated.record,newTask:newTask.record,newPlanItem:savedItem.record,
+    {originalTask:updated.record,originalPlanItem:updatedItem.record,newTask:newTask.record,newPlanItem:savedItem.record,
       originalAssignmentsPreserved:assignments.length>0},requestKey+":change");
   return {ok:true,originalTask:updated.record,newTask:newTask.record,newPlanItem:savedItem.record,
     originalAssignmentsPreserved:assignments.length>0,newTaskAssigned:false};
