@@ -4,7 +4,7 @@
  * Spreadsheet tables are append-only schema migrations; transactions are ledger based.
  */
 const ERP_VERSION = "1.0.0";
-const ERP_SCHEMA_VERSION = "1.0.2";
+const ERP_SCHEMA_VERSION = "1.0.3";
 
 const ERP_TABLES = Object.freeze({
   Organizations: ["organization_id","organization_name","organization_code","status","created_at","updated_at"],
@@ -32,6 +32,9 @@ const ERP_TABLES = Object.freeze({
   CropCycleEvents: ["cycle_event_id","crop_cycle_id","event_type","event_date","stage","quantity","unit","description","recorded_by","created_at"],
   TaskTemplates: ["template_id","farm_id","crop_id","variety_id","template_name","task_type","trigger_type","trigger_offset_days","recurrence_rule","default_duration_minutes","default_priority","checklist_json","status","created_at","updated_at"],
   Tasks: ["task_id","farm_id","site_id","field_id","plot_id","crop_cycle_id","template_id","event_id","sales_order_id","sales_line_id","required_quantity","required_unit","required_grade","work_window_start","work_window_end","deferral_reason","title","description","task_type","priority","status","planned_start","due_at","estimated_duration_minutes","assigned_team","created_by","created_at","updated_at"],
+  DailyWorkPlans: ["plan_id","farm_id","plan_date","status","briefing_notes","published_by","published_at","closed_by","closed_at","closeout_json","created_by","created_at","updated_at"],
+  DailyWorkPlanItems: ["plan_item_id","plan_id","task_id","source_type","source_reference","priority","planned_start","planned_end","estimated_duration_minutes","required_quantity","required_unit","required_grade","assignment_snapshot_json","status","deferral_reason","deferred_to","manager_notes","created_by","created_at","updated_at"],
+  DailyWorkPlanChanges: ["change_id","plan_id","plan_item_id","change_type","reason","before_json","after_json","changed_by","changed_at"],
   TaskStatusHistory: ["history_id","task_id","old_status","new_status","changed_at","changed_by","reason"],
   TaskAssignments: ["assignment_id","task_id","person_id","user_id","team_name","assignment_role","assigned_by","assigned_at","status"],
   TaskExecution: ["execution_id","task_id","person_id","contribution_percent","started_at","completed_at","duration_minutes","quantity","quantity_unit","area","area_unit","evidence_file_id","notes","exception_reason","review_status","reviewed_by","reviewed_at","recorded_by","idempotency_key","created_at"],
@@ -97,7 +100,7 @@ const ERP_KEYS = Object.freeze({
   Infrastructure:"infrastructure_id",Units:"unit_id",Crops:"crop_id",Varieties:"variety_id",
   CropProfiles:"crop_profile_id",PlantingCampaigns:"campaign_id",PlantingPlans:"planting_plan_id",
   CropCycles:"crop_cycle_id",CropCycleEvents:"cycle_event_id",TaskTemplates:"template_id",
-  Tasks:"task_id",TaskAssignments:"assignment_id",TaskStatusHistory:"history_id",
+  Tasks:"task_id",DailyWorkPlans:"plan_id",DailyWorkPlanItems:"plan_item_id",DailyWorkPlanChanges:"change_id",TaskAssignments:"assignment_id",TaskStatusHistory:"history_id",
   TaskExecution:"execution_id",People:"person_id",Attendance:"attendance_id",
   WageTransactions:"wage_transaction_id",Observations:"observation_id",
   IrrigationRuns:"irrigation_run_id",IrrigationOperations:"irrigation_operation_id",
@@ -142,7 +145,7 @@ const ERP_REQUIRED = Object.freeze({
   Crops:["crop_name"],Varieties:["crop_id","variety_name"],CropProfiles:["crop_id","production_system"],
   PlantingCampaigns:["farm_id","campaign_name"],PlantingPlans:["farm_id","plot_id","crop_id","target_planting_date"],
   CropCycles:["farm_id","plot_id","crop_id","start_date"],TaskTemplates:["template_name","task_type"],
-  Tasks:["farm_id","title"],TaskAssignments:["task_id"],People:["display_name"],
+  Tasks:["farm_id","title"],DailyWorkPlans:["farm_id","plan_date"],DailyWorkPlanItems:["plan_id","task_id"],DailyWorkPlanChanges:["plan_id","change_type","reason"],TaskAssignments:["task_id"],People:["display_name"],
   Attendance:["farm_id","person_id","work_date","attendance_status"],Observations:["farm_id","plot_id","observed_at","category"],
   IrrigationRuns:["farm_id","started_at"],IrrigationOperations:["irrigation_run_id","farm_id","plot_id","started_at"],
   Applications:["farm_id","plot_id","applied_at","application_type"],Suppliers:["supplier_name"],
@@ -168,7 +171,7 @@ const ERP_RELATIONS = Object.freeze({
   organization_id:"Organizations",farm_id:"Farms",site_id:"Sites",field_id:"Fields",plot_id:"Plots",source_plot_id:"Plots",source_cycle_id:"CropCycles",bed_id:"Beds",
   crop_id:"Crops",variety_id:"Varieties",crop_profile_id:"CropProfiles",campaign_id:"PlantingCampaigns",
   crop_cycle_id:"CropCycles",parent_cycle_id:"CropCycles",template_id:"TaskTemplates",event_id:"CalendarEvents",
-  task_id:"Tasks",event_id:"CalendarEvents",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
+  task_id:"Tasks",plan_id:"DailyWorkPlans",plan_item_id:"DailyWorkPlanItems",event_id:"CalendarEvents",person_id:"People",observer_id:"People",user_id:"Users",role_id:"Roles",team_id:"Teams",
   resulting_task_id:"Tasks",team_leader_id:"People",item_id:"InventoryItems",product_item_id:"InventoryItems",lot_id:"StockLots",
   source_lot_id:"StockLots",supplier_id:"Suppliers",customer_id:"Customers",product_id:"Products",
   price_list_id:"PriceLists",sales_order_id:"SalesOrders",sales_line_id:"SalesOrderLines",produce_lot_id:"ProduceLots",
@@ -185,7 +188,7 @@ const ERP_UNIQUE_FIELDS = Object.freeze({
   Fulfilments:["fulfilment_reference"],FulfilmentLines:["fulfilment_id","sales_line_id","produce_lot_id"],
   InvoiceLines:["invoice_id","sales_line_id"],Customers:["customer_name","phone"],
   Suppliers:["supplier_name","phone"],Products:["product_name","grade"],
-  Tasks:["crop_cycle_id","template_id","due_at"],TaskAssignments:["task_id","person_id"],
+  Tasks:["crop_cycle_id","template_id","due_at"],DailyWorkPlanItems:["plan_id","task_id"],TaskAssignments:["task_id","person_id"],
   CalendarEventOverrides:["event_id","occurrence_start"],CalendarEventOccurrences:["event_id","occurrence_start"]
 });
 
